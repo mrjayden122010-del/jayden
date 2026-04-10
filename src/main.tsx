@@ -32,33 +32,33 @@ const theme = createTheme({
     borderRadius: 0,
   },
   typography: {
-    fontFamily: '"Manrope", sans-serif',
+    fontFamily: '"Inter", sans-serif',
     h1: {
-      fontFamily: '"Fraunces", serif',
+      fontFamily: '"Inter", sans-serif',
       fontWeight: 700,
       letterSpacing: "-0.04em",
     },
     h2: {
-      fontFamily: '"Fraunces", serif',
+      fontFamily: '"Inter", sans-serif',
       fontWeight: 700,
       letterSpacing: "-0.04em",
     },
     h3: {
-      fontFamily: '"Fraunces", serif',
+      fontFamily: '"Inter", sans-serif',
       fontWeight: 700,
       letterSpacing: "-0.03em",
     },
     h4: {
-      fontFamily: '"Fraunces", serif',
+      fontFamily: '"Inter", sans-serif',
       fontWeight: 700,
       letterSpacing: "-0.03em",
     },
     h5: {
-      fontFamily: '"Fraunces", serif',
+      fontFamily: '"Inter", sans-serif',
       fontWeight: 600,
     },
     h6: {
-      fontFamily: '"Fraunces", serif',
+      fontFamily: '"Inter", sans-serif',
       fontWeight: 600,
     },
     button: {
