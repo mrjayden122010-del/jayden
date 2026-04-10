@@ -40,6 +40,7 @@ export default function App() {
   const [errorMessage, setErrorMessage] = useState("");
 
   const isFormValid = title.trim() !== "" && caption.trim() !== "" && selectedFile;
+  const imageCount = images?.length ?? 0;
   const helperText = useMemo(() => {
     if (selectedFile) {
       return `Selected image: ${selectedFile.name}`;
@@ -123,26 +124,52 @@ export default function App() {
       sx={{
         minHeight: "100vh",
         background:
-          "radial-gradient(circle at top left, rgba(26,115,232,0.18), transparent 26%), radial-gradient(circle at top right, rgba(217,48,37,0.14), transparent 24%), linear-gradient(180deg, #e8f0fe 0%, #f5f9ff 42%, #edf4ff 100%)",
+          "radial-gradient(circle at 12% 18%, rgba(255,181,213,0.6), transparent 0 26%), radial-gradient(circle at 88% 12%, rgba(255,92,160,0.24), transparent 0 24%), linear-gradient(180deg, #ffdce9 0%, #fff4f8 34%, #ffd6e6 100%)",
+        position: "relative",
+        overflow: "hidden",
+        "&::before": {
+          content: '""',
+          position: "absolute",
+          inset: "4% auto auto -10%",
+          width: 320,
+          height: 320,
+          borderRadius: "48% 52% 61% 39% / 35% 46% 54% 65%",
+          background:
+            "radial-gradient(circle at 30% 30%, rgba(255,255,255,0.7), rgba(255,126,186,0.22) 52%, rgba(255,126,186,0) 70%)",
+          filter: "blur(6px)",
+          pointerEvents: "none",
+        },
+        "&::after": {
+          content: '""',
+          position: "absolute",
+          right: "-6%",
+          bottom: "12%",
+          width: 260,
+          height: 260,
+          borderRadius: "50%",
+          border: "1px solid rgba(255,255,255,0.34)",
+          boxShadow: "0 0 0 22px rgba(255,255,255,0.12)",
+          pointerEvents: "none",
+        },
       }}
     >
       <AppBar
         position="sticky"
         elevation={0}
         sx={{
-          backgroundColor: "rgba(248, 251, 255, 0.88)",
+          backgroundColor: "rgba(255, 246, 250, 0.72)",
           color: "text.primary",
-          backdropFilter: "blur(14px)",
-          borderBottom: "1px solid rgba(26, 115, 232, 0.12)",
+          backdropFilter: "blur(18px)",
+          borderBottom: "1px solid rgba(186, 73, 126, 0.14)",
         }}
       >
         <Toolbar sx={{ gap: 2, justifyContent: "space-between" }}>
           <Box>
-            <Typography variant="h6" sx={{ letterSpacing: "-0.02em", fontWeight: 700 }}>
+            <Typography variant="h6" sx={{ letterSpacing: "-0.03em", fontWeight: 700 }}>
               Jayden Gallery
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Upload moments and stories into a live Convex gallery.
+              A sugar-blush archive for your brightest frames.
             </Typography>
           </Box>
           <Button
@@ -150,11 +177,13 @@ export default function App() {
             color="primary"
             onClick={() => setIsDialogOpen(true)}
             sx={{
-              px: 3,
-              py: 1.25,
-              boxShadow: "0 8px 24px rgba(26,115,232,0.18)",
+              px: 3.2,
+              py: 1.3,
+              background:
+                "linear-gradient(135deg, rgba(242,75,154,1), rgba(255,136,190,1))",
+              boxShadow: "0 16px 34px rgba(203, 46, 120, 0.28)",
               "&:hover": {
-                boxShadow: "0 10px 28px rgba(26,115,232,0.24)",
+                boxShadow: "0 20px 40px rgba(203, 46, 120, 0.34)",
               },
             }}
           >
@@ -169,46 +198,80 @@ export default function App() {
             elevation={0}
             sx={{
               p: { xs: 3, md: 5 },
-              border: "1px solid rgba(26, 115, 232, 0.12)",
+              border: "1px solid rgba(188, 88, 138, 0.18)",
               background:
-                "linear-gradient(135deg, rgba(255,255,255,0.94), rgba(232,240,254,0.96))",
-              boxShadow: "0 24px 48px rgba(26,115,232,0.08)",
+                "linear-gradient(145deg, rgba(255,255,255,0.8), rgba(255,228,239,0.88))",
+              boxShadow:
+                "0 24px 60px rgba(168, 39, 95, 0.12), inset 0 0 0 1px rgba(255,255,255,0.58)",
+              backdropFilter: "blur(18px)",
+              position: "relative",
+              overflow: "hidden",
+              "&::after": {
+                content: '""',
+                position: "absolute",
+                top: -40,
+                right: -20,
+                width: 180,
+                height: 180,
+                borderRadius: "50%",
+                background:
+                  "radial-gradient(circle, rgba(255,255,255,0.75), rgba(255,255,255,0) 70%)",
+              },
             }}
           >
-            <Stack spacing={2}>
-              <Typography variant="h2" sx={{ fontSize: { xs: "2.4rem", md: "4rem" } }}>
-                A home for your images and the words behind them.
+            <Stack spacing={2.5} sx={{ position: "relative", zIndex: 1 }}>
+              <Typography
+                variant="overline"
+                sx={{ color: "primary.dark", letterSpacing: "0.24em", fontWeight: 800 }}
+              >
+                Cotton Candy Archive
               </Typography>
-              <Typography variant="h6" color="text.secondary" sx={{ maxWidth: 760 }}>
-                Every upload is stored in Convex and appears instantly in this
-                gallery with its title and caption.
+              <Typography variant="h2" sx={{ fontSize: { xs: "2.8rem", md: "4.6rem" }, maxWidth: 920 }}>
+                Every image lands inside a dreamy pink gallery with instant live updates.
               </Typography>
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ pt: 1 }}>
+              <Typography variant="h6" color="text.secondary" sx={{ maxWidth: 760, lineHeight: 1.65 }}>
+                Upload portraits, moods, details, and tiny stories into a soft-focus collection
+                built on Convex. The whole experience now leans editorial, glossy, and unmistakably pink.
+              </Typography>
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ pt: 1, flexWrap: "wrap" }}>
                 <Box
                   sx={{
                     px: 2,
                     py: 1,
-                    borderRadius: 99,
-                    bgcolor: "rgba(26,115,232,0.10)",
-                    color: "primary.main",
-                    fontWeight: 600,
+                    borderRadius: 0,
+                    bgcolor: "rgba(242,75,154,0.12)",
+                    color: "primary.dark",
+                    fontWeight: 700,
                     width: "fit-content",
                   }}
                 >
-                  Light blue live gallery
+                  Powder-pink redesign
                 </Box>
                 <Box
                   sx={{
                     px: 2,
                     py: 1,
-                    borderRadius: 99,
-                    bgcolor: "rgba(217,48,37,0.10)",
-                    color: "secondary.main",
-                    fontWeight: 600,
+                    borderRadius: 0,
+                    bgcolor: "rgba(255,255,255,0.6)",
+                    color: "text.primary",
+                    fontWeight: 700,
                     width: "fit-content",
                   }}
                 >
-                  Blue and red Google-inspired UI
+                  Proper framed upload modal
+                </Box>
+                <Box
+                  sx={{
+                    px: 2,
+                    py: 1,
+                    borderRadius: 0,
+                    bgcolor: "rgba(255,195,219,0.7)",
+                    color: "primary.dark",
+                    fontWeight: 700,
+                    width: "fit-content",
+                  }}
+                >
+                  {imageCount} live {imageCount === 1 ? "image" : "images"}
                 </Box>
               </Stack>
             </Stack>
@@ -228,13 +291,14 @@ export default function App() {
                 p: 6,
                 textAlign: "center",
                 borderStyle: "dashed",
-                borderWidth: 1,
-                borderColor: "rgba(26, 115, 232, 0.28)",
-                backgroundColor: "rgba(248, 251, 255, 0.86)",
+                borderWidth: 1.5,
+                borderColor: "rgba(200, 83, 136, 0.32)",
+                backgroundColor: "rgba(255, 248, 252, 0.82)",
+                boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.5)",
               }}
             >
               <Typography variant="h4" gutterBottom>
-                Your gallery is ready.
+                Your pink gallery is ready.
               </Typography>
               <Typography color="text.secondary">
                 Use the upload button at the top to add the first image with a
@@ -261,13 +325,17 @@ export default function App() {
                     display: "flex",
                     flexDirection: "column",
                     overflow: "hidden",
-                    border: "1px solid rgba(26, 115, 232, 0.12)",
-                    backgroundColor: "rgba(248, 251, 255, 0.96)",
-                    boxShadow: "0 12px 32px rgba(26,115,232,0.10)",
-                    transition: "transform 180ms ease, box-shadow 180ms ease",
+                    border: "1px solid rgba(186, 73, 126, 0.18)",
+                    background:
+                      "linear-gradient(180deg, rgba(255,255,255,0.84), rgba(255,239,246,0.92))",
+                    boxShadow: "0 20px 42px rgba(168, 39, 95, 0.12)",
+                    borderRadius: 0,
+                    transition:
+                      "transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease",
                     "&:hover": {
-                      transform: "translateY(-4px)",
-                      boxShadow: "0 18px 40px rgba(26,115,232,0.14)",
+                      transform: "translateY(-6px) rotate(-0.5deg)",
+                      boxShadow: "0 24px 56px rgba(168, 39, 95, 0.18)",
+                      borderColor: "rgba(242,75,154,0.34)",
                     },
                   }}
                 >
@@ -284,7 +352,7 @@ export default function App() {
                         height: 260,
                         display: "grid",
                         placeItems: "center",
-                        bgcolor: "rgba(26, 115, 232, 0.08)",
+                        bgcolor: "rgba(242,75,154,0.08)",
                       }}
                     >
                       <Typography color="text.secondary">
@@ -306,10 +374,11 @@ export default function App() {
                       </Typography>
                       <Box
                         sx={{
-                          width: 44,
-                          height: 4,
-                          borderRadius: 999,
-                          bgcolor: "secondary.main",
+                          width: 56,
+                          height: 5,
+                          borderRadius: 0,
+                          background:
+                            "linear-gradient(90deg, rgba(242,75,154,1), rgba(255,186,214,1))",
                         }}
                       />
                     </Stack>
@@ -329,19 +398,48 @@ export default function App() {
         slotProps={{
           paper: {
             sx: {
-              borderRadius: 4,
+              borderRadius: 0,
               backgroundImage:
-                "linear-gradient(180deg, rgba(248,251,255,1), rgba(232,240,254,0.96))",
-              border: "1px solid rgba(26,115,232,0.12)",
+                "linear-gradient(180deg, rgba(255,250,252,0.98), rgba(255,234,244,0.96))",
+              border: "1.5px solid rgba(190, 74, 127, 0.26)",
+              overflow: "hidden",
+              position: "relative",
+              "&::before": {
+                content: '""',
+                position: "absolute",
+                inset: 10,
+                borderRadius: 0,
+                border: "1px solid rgba(255,255,255,0.6)",
+                pointerEvents: "none",
+              },
+            },
+          },
+          backdrop: {
+            sx: {
+              backgroundColor: "rgba(133, 18, 70, 0.22)",
+              backdropFilter: "blur(10px)",
             },
           },
         }}
       >
-        <DialogTitle>Upload an image</DialogTitle>
+        <DialogTitle sx={{ pb: 1 }}>
+          <Typography variant="h4">Upload an image</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
+            Add a new frame to the pink archive with a title and a short caption.
+          </Typography>
+        </DialogTitle>
         <DialogContent>
           <Stack spacing={2.5} sx={{ pt: 1 }}>
             {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
-            <Button variant="outlined" component="label" sx={{ alignSelf: "flex-start" }}>
+            <Button
+              variant="outlined"
+              component="label"
+              sx={{
+                alignSelf: "flex-start",
+                borderColor: "rgba(190, 74, 127, 0.24)",
+                backgroundColor: "rgba(255,255,255,0.55)",
+              }}
+            >
               Choose Image
               <input
                 hidden
@@ -378,6 +476,10 @@ export default function App() {
           <Button
             variant="contained"
             disabled={!isFormValid || isSubmitting}
+            sx={{
+              background:
+                "linear-gradient(135deg, rgba(242,75,154,1), rgba(255,136,190,1))",
+            }}
             onClick={() => {
               void handleSubmit();
             }}
