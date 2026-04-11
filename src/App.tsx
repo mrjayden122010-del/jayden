@@ -1,4 +1,4 @@
-import { ChangeEvent, DragEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, ClipboardEvent, DragEvent, useEffect, useEffectEvent, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import {
   Alert,
@@ -49,6 +49,38 @@ const ADMIN_SESSION_STORAGE_KEY = "jayden-gallery-admin-session";
 
 const normalizeHexColor = (value: string) => value.trim().toUpperCase();
 const sortByName = (left: LocationOption, right: LocationOption) => left.name.localeCompare(right.name);
+const mimeTypeToExtension = (mimeType: string) => {
+  const subtype = mimeType.split("/")[1] ?? "png";
+
+  if (subtype === "jpeg") {
+    return "jpg";
+  }
+
+  if (subtype === "svg+xml") {
+    return "svg";
+  }
+
+  return subtype;
+};
+const extractImageFileFromClipboardData = (clipboardData: DataTransfer | null) => {
+  if (!clipboardData) {
+    return null;
+  }
+
+  for (const item of Array.from(clipboardData.items)) {
+    if (!item.type.startsWith("image/")) {
+      continue;
+    }
+
+    const file = item.getAsFile();
+
+    if (file) {
+      return file;
+    }
+  }
+
+  return null;
+};
 
 const mapCountryOption = (country: ICountry): LocationOption => ({
   code: country.isoCode,
@@ -97,6 +129,7 @@ export default function App({ defaultBrandColor }: AppProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isDragActive, setIsDragActive] = useState(false);
+  const [isPastingPhoto, setIsPastingPhoto] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [editErrorMessage, setEditErrorMessage] = useState("");
@@ -399,6 +432,9 @@ export default function App({ defaultBrandColor }: AppProps) {
       return (currentIndex + 1) % filteredImages.length;
     });
   };
+  const handleViewerStepEvent = useEffectEvent((direction: "previous" | "next") => {
+    handleViewerStep(direction);
+  });
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
@@ -421,6 +457,58 @@ export default function App({ defaultBrandColor }: AppProps) {
     setIsDragActive(false);
     const file = event.dataTransfer.files?.[0] ?? null;
     handleSelectedFile(file);
+  };
+
+  const handlePaste = (event: ClipboardEvent<HTMLDivElement>) => {
+    const file = extractImageFileFromClipboardData(event.clipboardData);
+
+    if (!file) {
+      return;
+    }
+
+    event.preventDefault();
+    handleSelectedFile(file);
+  };
+
+  const handlePasteButtonClick = async () => {
+    if (typeof navigator === "undefined" || !navigator.clipboard?.read) {
+      setErrorMessage("Clipboard paste button is not supported here. Click the upload area and press Ctrl+V instead.");
+      return;
+    }
+
+    setIsPastingPhoto(true);
+    setErrorMessage("");
+
+    try {
+      const clipboardItems = await navigator.clipboard.read();
+
+      for (const clipboardItem of clipboardItems) {
+        const imageType = clipboardItem.types.find((type) => type.startsWith("image/"));
+
+        if (!imageType) {
+          continue;
+        }
+
+        const blob = await clipboardItem.getType(imageType);
+        const file = new File([blob], `pasted-photo.${mimeTypeToExtension(imageType)}`, {
+          type: imageType,
+          lastModified: Date.now(),
+        });
+
+        handleSelectedFile(file);
+        return;
+      }
+
+      setErrorMessage("No photo found in your clipboard. Copy an image first, then try Paste Photo.");
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not read the clipboard. You can still click the upload area and press Ctrl+V.",
+      );
+    } finally {
+      setIsPastingPhoto(false);
+    }
   };
 
   useEffect(() => {
@@ -652,12 +740,12 @@ export default function App({ defaultBrandColor }: AppProps) {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "ArrowLeft") {
         event.preventDefault();
-        handleViewerStep("previous");
+        handleViewerStepEvent("previous");
       }
 
       if (event.key === "ArrowRight") {
         event.preventDefault();
-        handleViewerStep("next");
+        handleViewerStepEvent("next");
       }
     };
 
@@ -1533,6 +1621,8 @@ export default function App({ defaultBrandColor }: AppProps) {
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
+              onPaste={handlePaste}
+              tabIndex={0}
               sx={{
                 p: 2,
                 borderStyle: "dashed",
@@ -1582,17 +1672,33 @@ export default function App({ defaultBrandColor }: AppProps) {
                     </Stack>
                   </Box>
                 )}
-                <Button
-                  variant="outlined"
-                  component="label"
-                  sx={{
-                    borderColor: alpha(theme.palette.primary.dark, 0.24),
-                    backgroundColor: "#ffffff",
-                  }}
-                >
-                  Select Image
-                  <input hidden accept="image/*" type="file" onChange={handleFileChange} />
-                </Button>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+                  <Button
+                    variant="outlined"
+                    component="label"
+                    disabled={isPastingPhoto}
+                    sx={{
+                      borderColor: alpha(theme.palette.primary.dark, 0.24),
+                      backgroundColor: "#ffffff",
+                    }}
+                  >
+                    Select Image
+                    <input hidden accept="image/*" type="file" onChange={handleFileChange} />
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    onClick={() => {
+                      void handlePasteButtonClick();
+                    }}
+                    disabled={isPastingPhoto}
+                    sx={{
+                      borderColor: alpha(theme.palette.primary.dark, 0.24),
+                      backgroundColor: "#ffffff",
+                    }}
+                  >
+                    {isPastingPhoto ? "Pasting..." : "Paste Photo"}
+                  </Button>
+                </Stack>
                 <Typography
                   variant="body2"
                   color="text.secondary"
@@ -1600,7 +1706,7 @@ export default function App({ defaultBrandColor }: AppProps) {
                 >
                   {selectedFile
                     ? `Selected image: ${selectedFile.name}`
-                    : "Drop an image into this area or use Select Image."}
+                    : "Drop an image here, use Select Image, or click this area and press Ctrl+V."}
                 </Typography>
               </Stack>
             </Paper>
