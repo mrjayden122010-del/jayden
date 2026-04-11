@@ -5,7 +5,7 @@ import "./index.css";
 import ThemeShell from "./ThemeShell";
 
 const convexUrl =
-  import.meta.env.VITE_CONVEX_URL ?? "https://neat-narwhal-468.convex.cloud";
+  import.meta.env.VITE_CONVEX_URL ?? "https://coordinated-malamute-149.convex.cloud";
 
 const convex = new ConvexReactClient(convexUrl);
 
