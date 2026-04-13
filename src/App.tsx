@@ -124,8 +124,10 @@ export default function App({ defaultBrandColor }: AppProps) {
   const [caption, setCaption] = useState("");
   const [selectedCountry, setSelectedCountry] = useState<LocationOption | null>(null);
   const [selectedCity, setSelectedCity] = useState<LocationOption | null>(null);
+  const [streetAddress, setStreetAddress] = useState("");
   const [editCountry, setEditCountry] = useState<LocationOption | null>(null);
   const [editCity, setEditCity] = useState<LocationOption | null>(null);
+  const [editStreetAddress, setEditStreetAddress] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isDragActive, setIsDragActive] = useState(false);
@@ -135,6 +137,7 @@ export default function App({ defaultBrandColor }: AppProps) {
   const [editErrorMessage, setEditErrorMessage] = useState("");
   const [countryFilter, setCountryFilter] = useState<string | null>(null);
   const [cityFilter, setCityFilter] = useState<string | null>(null);
+  const [streetAddressFilter, setStreetAddressFilter] = useState<string | null>(null);
   const [filterAnchorEl, setFilterAnchorEl] = useState<HTMLElement | null>(null);
   const [brandColorInput, setBrandColorInput] = useState(defaultBrandColor);
   const [themeErrorMessage, setThemeErrorMessage] = useState("");
@@ -258,10 +261,12 @@ export default function App({ defaultBrandColor }: AppProps) {
     return images.filter((image) => {
       const matchesCountry = !countryFilter || image.country === countryFilter;
       const matchesCity = !cityFilter || image.city === cityFilter;
+      const matchesStreetAddress =
+        !streetAddressFilter || image.streetAddress === streetAddressFilter;
 
-      return matchesCountry && matchesCity;
+      return matchesCountry && matchesCity && matchesStreetAddress;
     });
-  }, [cityFilter, countryFilter, images]);
+  }, [cityFilter, countryFilter, images, streetAddressFilter]);
   const countryFilterOptions = useMemo(
     () =>
       Array.from(new Set((images ?? []).map((image) => image.country).filter(Boolean))).sort((left, right) =>
@@ -280,6 +285,19 @@ export default function App({ defaultBrandColor }: AppProps) {
         ),
       ).sort((left, right) => left.localeCompare(right)),
     [countryFilter, images],
+  );
+  const streetAddressFilterOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          (images ?? [])
+            .filter((image) => !countryFilter || image.country === countryFilter)
+            .filter((image) => !cityFilter || image.city === cityFilter)
+            .map((image) => image.streetAddress)
+            .filter(Boolean),
+        ),
+      ).sort((left, right) => left.localeCompare(right)),
+    [cityFilter, countryFilter, images],
   );
 
   const clearSession = () => {
@@ -339,6 +357,7 @@ export default function App({ defaultBrandColor }: AppProps) {
     setCaption("");
     setSelectedCountry(null);
     setSelectedCity(null);
+    setStreetAddress("");
     setSelectedFile(null);
     setPreviewUrl(null);
     setIsDragActive(false);
@@ -376,6 +395,7 @@ export default function App({ defaultBrandColor }: AppProps) {
     setEditCaption("");
     setEditCountry(null);
     setEditCity(null);
+    setEditStreetAddress("");
     setEditErrorMessage("");
   };
 
@@ -404,6 +424,7 @@ export default function App({ defaultBrandColor }: AppProps) {
     setEditCaption(image.caption);
     setEditCountry(matchingCountry);
     setEditCity(image.city ? { code: image.city, name: image.city } : null);
+    setEditStreetAddress(image.streetAddress ?? "");
     setEditErrorMessage("");
   };
 
@@ -517,6 +538,12 @@ export default function App({ defaultBrandColor }: AppProps) {
     }
   }, [cityFilter, cityFilterOptions]);
 
+  useEffect(() => {
+    if (streetAddressFilter && !streetAddressFilterOptions.includes(streetAddressFilter)) {
+      setStreetAddressFilter(null);
+    }
+  }, [streetAddressFilter, streetAddressFilterOptions]);
+
   const handleBrandColorChange = (value: string) => {
     const normalized = normalizeHexColor(value);
 
@@ -602,6 +629,7 @@ export default function App({ defaultBrandColor }: AppProps) {
         caption,
         country: selectedCountry.name,
         city: selectedCity.name,
+        streetAddress: streetAddress.trim() || undefined,
       });
 
       setIsDialogOpen(false);
@@ -642,12 +670,14 @@ export default function App({ defaultBrandColor }: AppProps) {
         caption: editCaption,
         country: editCountry.name,
         city: editCity.name,
+        streetAddress: editStreetAddress.trim() || undefined,
       });
 
       setIsSavingEdit(false);
       setEditingImageId(null);
       setEditTitle("");
       setEditCaption("");
+      setEditStreetAddress("");
       setEditErrorMessage("");
     } catch (error) {
       setEditErrorMessage(
@@ -977,7 +1007,7 @@ export default function App({ defaultBrandColor }: AppProps) {
                 No images match this location yet.
               </Typography>
               <Typography color="text.secondary">
-                Try a different country or city filter to see more artwork.
+                Try a different country, city, or street address filter to see more artwork.
               </Typography>
             </Paper>
           ) : (
@@ -1052,9 +1082,9 @@ export default function App({ defaultBrandColor }: AppProps) {
                           <Typography variant="body1" color="text.secondary">
                             {image.caption}
                           </Typography>
-                          {image.country || image.city ? (
+                          {image.country || image.city || image.streetAddress ? (
                             <Chip
-                              label={[image.city, image.country].filter(Boolean).join(", ")}
+                              label={[image.streetAddress, image.city, image.country].filter(Boolean).join(", ")}
                               variant="outlined"
                               color="primary"
                               sx={{ alignSelf: "flex-start" }}
@@ -1132,15 +1162,16 @@ export default function App({ defaultBrandColor }: AppProps) {
             <Box>
               <Typography variant="h6">Filter Gallery</Typography>
               <Typography variant="body2" color="text.secondary">
-                Choose a country or city.
+                Choose a country, city, or street address.
               </Typography>
             </Box>
-            {(countryFilter || cityFilter) ? (
+            {(countryFilter || cityFilter || streetAddressFilter) ? (
               <Button
                 variant="text"
                 onClick={() => {
                   setCountryFilter(null);
                   setCityFilter(null);
+                  setStreetAddressFilter(null);
                 }}
               >
                 Clear
@@ -1164,6 +1195,7 @@ export default function App({ defaultBrandColor }: AppProps) {
                       currentCountry === country ? null : country,
                     );
                     setCityFilter(null);
+                    setStreetAddressFilter(null);
                   }}
                 />
               ))}
@@ -1181,14 +1213,41 @@ export default function App({ defaultBrandColor }: AppProps) {
                   clickable
                   color={cityFilter === city ? "primary" : "default"}
                   variant={cityFilter === city ? "filled" : "outlined"}
-                  onClick={() =>
-                    setCityFilter((currentCity) => (currentCity === city ? null : city))
-                  }
+                  onClick={() => {
+                    setCityFilter((currentCity) => (currentCity === city ? null : city));
+                    setStreetAddressFilter(null);
+                  }}
                 />
               ))}
               {cityFilterOptions.length === 0 ? (
                 <Typography variant="body2" color="text.secondary">
                   Pick a country to narrow the city list.
+                </Typography>
+              ) : null}
+            </Stack>
+          </Stack>
+          <Stack spacing={1.25}>
+            <Typography variant="subtitle2" color="text.secondary">
+              Street Addresses
+            </Typography>
+            <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: "wrap" }}>
+              {streetAddressFilterOptions.map((currentStreetAddress) => (
+                <Chip
+                  key={currentStreetAddress}
+                  label={currentStreetAddress}
+                  clickable
+                  color={streetAddressFilter === currentStreetAddress ? "primary" : "default"}
+                  variant={streetAddressFilter === currentStreetAddress ? "filled" : "outlined"}
+                  onClick={() =>
+                    setStreetAddressFilter((currentValue) =>
+                      currentValue === currentStreetAddress ? null : currentStreetAddress,
+                    )
+                  }
+                />
+              ))}
+              {streetAddressFilterOptions.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  Pick a city to narrow the street address list.
                 </Typography>
               ) : null}
             </Stack>
@@ -1339,9 +1398,9 @@ export default function App({ defaultBrandColor }: AppProps) {
                   <Typography variant="body1" color="text.secondary">
                     {activeImage.caption}
                   </Typography>
-                  {activeImage.country || activeImage.city ? (
+                  {activeImage.country || activeImage.city || activeImage.streetAddress ? (
                     <Chip
-                      label={[activeImage.city, activeImage.country].filter(Boolean).join(", ")}
+                      label={[activeImage.streetAddress, activeImage.city, activeImage.country].filter(Boolean).join(", ")}
                       variant="outlined"
                       color="primary"
                       sx={{ alignSelf: "flex-start" }}
@@ -1558,6 +1617,13 @@ export default function App({ defaultBrandColor }: AppProps) {
               onChange={(_, value) => setEditCity(value)}
               renderInput={(params) => <TextField {...params} label="City" required />}
             />
+            <TextField
+              label="Street Address"
+              value={editStreetAddress}
+              onChange={(event) => setEditStreetAddress(event.target.value)}
+              fullWidth
+              helperText="Optional"
+            />
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 3 }}>
@@ -1748,6 +1814,13 @@ export default function App({ defaultBrandColor }: AppProps) {
               getOptionLabel={(option) => option.name}
               onChange={(_, value) => setSelectedCity(value)}
               renderInput={(params) => <TextField {...params} label="City" required />}
+            />
+            <TextField
+              label="Street Address"
+              value={streetAddress}
+              onChange={(event) => setStreetAddress(event.target.value)}
+              fullWidth
+              helperText="Optional"
             />
           </Stack>
         </DialogContent>

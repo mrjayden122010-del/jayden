@@ -128,6 +128,7 @@ export const createImageEntry = mutation({
     caption: v.string(),
     country: v.string(),
     city: v.string(),
+    streetAddress: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);
@@ -135,6 +136,7 @@ export const createImageEntry = mutation({
     const caption = args.caption.trim();
     const country = args.country.trim();
     const city = args.city.trim();
+    const streetAddress = args.streetAddress?.trim();
 
     if (!title) {
       throw new Error("Title is required.");
@@ -158,6 +160,7 @@ export const createImageEntry = mutation({
       caption,
       country,
       city,
+      streetAddress: streetAddress || undefined,
     });
   },
 });
@@ -170,6 +173,7 @@ export const updateImageEntry = mutation({
     caption: v.string(),
     country: v.string(),
     city: v.string(),
+    streetAddress: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);
@@ -177,6 +181,7 @@ export const updateImageEntry = mutation({
     const caption = args.caption.trim();
     const country = args.country.trim();
     const city = args.city.trim();
+    const streetAddress = args.streetAddress?.trim();
 
     if (!title) {
       throw new Error("Title is required.");
@@ -199,6 +204,7 @@ export const updateImageEntry = mutation({
       caption,
       country,
       city,
+      streetAddress: streetAddress || undefined,
     });
 
     return { imageId: args.imageId };
@@ -218,6 +224,7 @@ export const listImages = query({
         caption: image.caption,
         country: image.country ?? "",
         city: image.city ?? "",
+        streetAddress: image.streetAddress ?? "",
         imageUrl: await ctx.storage.getUrl(image.storageId),
       })),
     );

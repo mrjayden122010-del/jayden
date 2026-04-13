@@ -12,6 +12,7 @@ export default defineSchema({
     caption: v.string(),
     country: v.optional(v.string()),
     city: v.optional(v.string()),
+    streetAddress: v.optional(v.string()),
   }).index("by_country_and_city", ["country", "city"]),
   siteSettings: defineTable({
     key: v.string(),
