@@ -37,8 +37,14 @@ type UploadResult = {
   storageId: Id<"_storage">;
 };
 
+type ThemeColors = {
+  brandColor: string;
+  secondaryColor: string;
+  accentColor: string;
+};
+
 type AppProps = {
-  defaultBrandColor: string;
+  defaultThemeColors: ThemeColors;
 };
 
 type LocationOption = {
@@ -95,7 +101,7 @@ const mapCityOption = (city: ICity): LocationOption => ({
   name: city.name,
 });
 
-export default function App({ defaultBrandColor }: AppProps) {
+export default function App({ defaultThemeColors }: AppProps) {
   const theme = useTheme();
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string | null>(null);
   const images = useQuery(api.gallery.listImages, { category: selectedCategoryFilter });
@@ -145,17 +151,21 @@ export default function App({ defaultBrandColor }: AppProps) {
   const [countryFilter, setCountryFilter] = useState<string | null>(null);
   const [cityFilter, setCityFilter] = useState<string | null>(null);
   const [filterAnchorEl, setFilterAnchorEl] = useState<HTMLElement | null>(null);
-  const [brandColorInput, setBrandColorInput] = useState(defaultBrandColor);
+  const [brandColorInput, setBrandColorInput] = useState(defaultThemeColors.brandColor);
+  const [secondaryColorInput, setSecondaryColorInput] = useState(defaultThemeColors.secondaryColor);
+  const [accentColorInput, setAccentColorInput] = useState(defaultThemeColors.accentColor);
   const [themeErrorMessage, setThemeErrorMessage] = useState("");
   const [isSavingTheme, setIsSavingTheme] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (!isThemeDialogOpen) {
-      setBrandColorInput(defaultBrandColor);
+      setBrandColorInput(defaultThemeColors.brandColor);
+      setSecondaryColorInput(defaultThemeColors.secondaryColor);
+      setAccentColorInput(defaultThemeColors.accentColor);
       setThemeErrorMessage("");
     }
-  }, [defaultBrandColor, isThemeDialogOpen]);
+  }, [defaultThemeColors, isThemeDialogOpen]);
 
   useEffect(() => {
     if (!selectedFile) {
@@ -252,7 +262,16 @@ export default function App({ defaultBrandColor }: AppProps) {
 
     return "Choose an image file to add to the gallery.";
   }, [selectedFile]);
-  const currentBrandColor = defaultBrandColor;
+  const currentThemeColors = defaultThemeColors;
+  const previewBrandColor = HEX_COLOR_PATTERN.test(brandColorInput)
+    ? brandColorInput
+    : currentThemeColors.brandColor;
+  const previewSecondaryColor = HEX_COLOR_PATTERN.test(secondaryColorInput)
+    ? secondaryColorInput
+    : currentThemeColors.secondaryColor;
+  const previewAccentColor = HEX_COLOR_PATTERN.test(accentColorInput)
+    ? accentColorInput
+    : currentThemeColors.accentColor;
   const isEditFormValid = Boolean(
     editCategory.trim() !== "" &&
     editTitle.trim() !== "" &&
@@ -379,7 +398,9 @@ export default function App({ defaultBrandColor }: AppProps) {
     }
 
     setIsThemeDialogOpen(false);
-    setBrandColorInput(defaultBrandColor);
+    setBrandColorInput(defaultThemeColors.brandColor);
+    setSecondaryColorInput(defaultThemeColors.secondaryColor);
+    setAccentColorInput(defaultThemeColors.accentColor);
     setThemeErrorMessage("");
   };
 
@@ -539,10 +560,21 @@ export default function App({ defaultBrandColor }: AppProps) {
     }
   }, [cityFilter, cityFilterOptions]);
 
-  const handleBrandColorChange = (value: string) => {
+  const handleThemeColorChange = (key: keyof ThemeColors, value: string) => {
     const normalized = normalizeHexColor(value);
 
-    setBrandColorInput(normalized);
+    if (key === "brandColor") {
+      setBrandColorInput(normalized);
+    }
+
+    if (key === "secondaryColor") {
+      setSecondaryColorInput(normalized);
+    }
+
+    if (key === "accentColor") {
+      setAccentColorInput(normalized);
+    }
+
     setThemeErrorMessage("");
   };
 
@@ -556,10 +588,16 @@ export default function App({ defaultBrandColor }: AppProps) {
       return;
     }
 
-    const normalized = normalizeHexColor(brandColorInput);
+    const normalizedBrandColor = normalizeHexColor(brandColorInput);
+    const normalizedSecondaryColor = normalizeHexColor(secondaryColorInput);
+    const normalizedAccentColor = normalizeHexColor(accentColorInput);
 
-    if (!HEX_COLOR_PATTERN.test(normalized)) {
-      setThemeErrorMessage("Enter a full 6-digit hex color like #6B7280.");
+    if (
+      !HEX_COLOR_PATTERN.test(normalizedBrandColor) ||
+      !HEX_COLOR_PATTERN.test(normalizedSecondaryColor) ||
+      !HEX_COLOR_PATTERN.test(normalizedAccentColor)
+    ) {
+      setThemeErrorMessage("Enter three full 6-digit hex colors like #6B7280.");
       return;
     }
 
@@ -567,11 +605,16 @@ export default function App({ defaultBrandColor }: AppProps) {
     setThemeErrorMessage("");
 
     try {
-      await saveThemeSettings({ sessionToken: activeSessionToken, brandColor: normalized });
+      await saveThemeSettings({
+        sessionToken: activeSessionToken,
+        brandColor: normalizedBrandColor,
+        secondaryColor: normalizedSecondaryColor,
+        accentColor: normalizedAccentColor,
+      });
       setIsThemeDialogOpen(false);
     } catch (error) {
       setThemeErrorMessage(
-        handleProtectedActionError(error, "Unable to save the theme color right now."),
+        handleProtectedActionError(error, "Unable to save the theme colors right now."),
       );
     } finally {
       setIsSavingTheme(false);
@@ -796,8 +839,9 @@ export default function App({ defaultBrandColor }: AppProps) {
         minHeight: "100vh",
         background: [
           `radial-gradient(circle at 12% 18%, ${alpha(theme.palette.primary.light, 0.52)}, transparent 0 26%)`,
-          `radial-gradient(circle at 88% 12%, ${alpha(theme.palette.primary.dark, 0.2)}, transparent 0 24%)`,
-          `linear-gradient(180deg, ${lighten(currentBrandColor, 0.82)} 0%, ${theme.palette.background.default} 34%, ${lighten(currentBrandColor, 0.76)} 100%)`,
+          `radial-gradient(circle at 88% 12%, ${alpha(theme.palette.secondary.main, 0.2)}, transparent 0 24%)`,
+          `radial-gradient(circle at 55% 88%, ${alpha(theme.palette.info.main, 0.14)}, transparent 0 26%)`,
+          `linear-gradient(180deg, ${lighten(currentThemeColors.secondaryColor, 0.82)} 0%, ${theme.palette.background.default} 34%, ${lighten(currentThemeColors.accentColor, 0.8)} 100%)`,
         ].join(", "),
         position: "relative",
         overflow: "hidden",
@@ -808,7 +852,7 @@ export default function App({ defaultBrandColor }: AppProps) {
           width: 320,
           height: 320,
           borderRadius: "48% 52% 61% 39% / 35% 46% 54% 65%",
-          background: `radial-gradient(circle at 30% 30%, ${alpha("#ffffff", 0.7)}, ${alpha(theme.palette.primary.main, 0.22)} 52%, ${alpha(theme.palette.primary.main, 0)} 70%)`,
+          background: `radial-gradient(circle at 30% 30%, ${alpha("#ffffff", 0.7)}, ${alpha(theme.palette.secondary.main, 0.22)} 50%, ${alpha(theme.palette.info.main, 0.08)} 64%, ${alpha(theme.palette.info.main, 0)} 78%)`,
           filter: "blur(6px)",
           pointerEvents: "none",
         },
@@ -821,7 +865,7 @@ export default function App({ defaultBrandColor }: AppProps) {
           height: 260,
           borderRadius: "50%",
           border: `1px solid ${alpha("#ffffff", 0.34)}`,
-          boxShadow: `0 0 0 22px ${alpha(theme.palette.primary.main, 0.12)}`,
+          boxShadow: `0 0 0 22px ${alpha(theme.palette.info.main, 0.12)}`,
           pointerEvents: "none",
         },
       }}
@@ -830,7 +874,7 @@ export default function App({ defaultBrandColor }: AppProps) {
         position="sticky"
         elevation={0}
         sx={{
-          backgroundColor: alpha(lighten(currentBrandColor, 0.95), 0.72),
+          backgroundColor: alpha(lighten(currentThemeColors.brandColor, 0.95), 0.72),
           color: "text.primary",
           backdropFilter: "blur(18px)",
           borderBottom: `1px solid ${alpha(theme.palette.primary.dark, 0.14)}`,
@@ -853,7 +897,9 @@ export default function App({ defaultBrandColor }: AppProps) {
                     variant="outlined"
                     color="primary"
                     onClick={() => {
-                      setBrandColorInput(defaultBrandColor);
+                      setBrandColorInput(defaultThemeColors.brandColor);
+                      setSecondaryColorInput(defaultThemeColors.secondaryColor);
+                      setAccentColorInput(defaultThemeColors.accentColor);
                       setThemeErrorMessage("");
                       setIsThemeDialogOpen(true);
                     }}
@@ -864,7 +910,7 @@ export default function App({ defaultBrandColor }: AppProps) {
                       backgroundColor: alpha("#ffffff", 0.45),
                     }}
                   >
-                    Theme Color
+                    Theme Colors
                   </Button>
                   <Button
                     variant="contained"
@@ -1200,7 +1246,7 @@ export default function App({ defaultBrandColor }: AppProps) {
               maxWidth: "calc(100vw - 32px)",
               borderRadius: 0,
               border: `1px solid ${alpha(theme.palette.primary.dark, 0.18)}`,
-              background: `linear-gradient(180deg, ${alpha("#ffffff", 0.97)}, ${alpha(lighten(currentBrandColor, 0.82), 0.95)})`,
+              background: `linear-gradient(180deg, ${alpha("#ffffff", 0.97)}, ${alpha(lighten(currentThemeColors.secondaryColor, 0.84), 0.95)} 54%, ${alpha(lighten(currentThemeColors.accentColor, 0.86), 0.94)})`,
               boxShadow: `0 20px 42px ${alpha(theme.palette.primary.dark, 0.12)}`,
             },
           },
@@ -1304,7 +1350,7 @@ export default function App({ defaultBrandColor }: AppProps) {
           },
           backdrop: {
             sx: {
-              backgroundColor: alpha(darken(currentBrandColor, 0.7), 0.22),
+              backgroundColor: alpha(darken(currentThemeColors.brandColor, 0.7), 0.22),
               backdropFilter: "blur(10px)",
             },
           },
@@ -1356,13 +1402,13 @@ export default function App({ defaultBrandColor }: AppProps) {
             sx: {
               borderRadius: 0,
               overflow: "hidden",
-              background: `linear-gradient(180deg, ${alpha("#ffffff", 0.98)}, ${alpha(lighten(currentBrandColor, 0.8), 0.98)})`,
+              background: `linear-gradient(180deg, ${alpha("#ffffff", 0.98)}, ${alpha(lighten(currentThemeColors.secondaryColor, 0.82), 0.98)} 58%, ${alpha(lighten(currentThemeColors.accentColor, 0.84), 0.96)})`,
               border: `1.5px solid ${alpha(theme.palette.primary.dark, 0.26)}`,
             },
           },
           backdrop: {
             sx: {
-              backgroundColor: alpha(darken(currentBrandColor, 0.78), 0.6),
+              backgroundColor: alpha(darken(currentThemeColors.brandColor, 0.78), 0.6),
               backdropFilter: "blur(12px)",
             },
           },
@@ -1495,17 +1541,17 @@ export default function App({ defaultBrandColor }: AppProps) {
           },
           backdrop: {
             sx: {
-              backgroundColor: alpha(darken(currentBrandColor, 0.7), 0.22),
+              backgroundColor: alpha(darken(currentThemeColors.brandColor, 0.7), 0.22),
               backdropFilter: "blur(10px)",
             },
           },
         }}
       >
         <DialogTitle sx={{ pb: 1 }}>
-          <Typography variant="h4">Choose your gallery color</Typography>
+          <Typography variant="h4">Choose three gallery colors</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
-            Type a hex code or use the color wheel. The site previews live, and saving
-            stores it in Convex for the next visit.
+            Pick a main color, a warm support color, and an accent. The page blends all
+            three across the background, buttons, cards, and dialogs once you save.
           </Typography>
         </DialogTitle>
         <DialogContent>
@@ -1522,40 +1568,138 @@ export default function App({ defaultBrandColor }: AppProps) {
                   width: "100%",
                   p: 2,
                   border: `1px solid ${alpha(theme.palette.primary.dark, 0.18)}`,
-                  backgroundColor: "#ffffff",
+                  backgroundColor: alpha("#ffffff", 0.88),
+                }}
+              >
+                <Stack spacing={2.25}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                    Palette Controls
+                  </Typography>
+                  {[
+                    {
+                      key: "brandColor" as const,
+                      label: "Main color",
+                      helperText: "Used for the core brand tone and readable structure.",
+                      value: brandColorInput,
+                      fallback: currentThemeColors.brandColor,
+                    },
+                    {
+                      key: "secondaryColor" as const,
+                      label: "Support color",
+                      helperText: "Blended into gradients, surfaces, and softer highlights.",
+                      value: secondaryColorInput,
+                      fallback: currentThemeColors.secondaryColor,
+                    },
+                    {
+                      key: "accentColor" as const,
+                      label: "Accent color",
+                      helperText: "Used for contrast, motion points, and bright finishing touches.",
+                      value: accentColorInput,
+                      fallback: currentThemeColors.accentColor,
+                    },
+                  ].map((colorField) => (
+                    <Paper
+                      key={colorField.key}
+                      elevation={0}
+                      sx={{
+                        p: 1.5,
+                        border: `1px solid ${alpha(theme.palette.primary.dark, 0.12)}`,
+                        backgroundColor: alpha("#ffffff", 0.8),
+                      }}
+                    >
+                      <Stack spacing={1.25}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                          {colorField.label}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {colorField.helperText}
+                        </Typography>
+                        <Box
+                          component="input"
+                          type="color"
+                          aria-label={`Pick ${colorField.label.toLowerCase()}`}
+                          value={
+                            HEX_COLOR_PATTERN.test(colorField.value)
+                              ? colorField.value
+                              : colorField.fallback
+                          }
+                          onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                            handleThemeColorChange(colorField.key, event.target.value);
+                          }}
+                          sx={{
+                            width: "100%",
+                            minHeight: 76,
+                            border: 0,
+                            background: "transparent",
+                            cursor: "pointer",
+                          }}
+                        />
+                        <TextField
+                          label={`${colorField.label} hex`}
+                          value={colorField.value}
+                          onChange={(event) => {
+                            handleThemeColorChange(colorField.key, event.target.value);
+                          }}
+                          placeholder="#6B7280"
+                          fullWidth
+                        />
+                      </Stack>
+                    </Paper>
+                  ))}
+                </Stack>
+              </Paper>
+              <Paper
+                elevation={0}
+                sx={{
+                  width: { xs: "100%", md: 220 },
+                  p: 2,
+                  border: `1px solid ${alpha(theme.palette.primary.dark, 0.18)}`,
+                  background: `linear-gradient(165deg, ${alpha(previewBrandColor, 0.2)}, ${alpha(previewSecondaryColor, 0.16)} 52%, ${alpha(previewAccentColor, 0.18)})`,
                 }}
               >
                 <Stack spacing={2}>
                   <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                    Color Wheel
+                    Combined Preview
                   </Typography>
                   <Box
-                    component="input"
-                    type="color"
-                    aria-label="Pick a brand color"
-                    value={HEX_COLOR_PATTERN.test(brandColorInput)
-                      ? brandColorInput
-                      : currentBrandColor}
-                    onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                      handleBrandColorChange(event.target.value);
-                    }}
                     sx={{
-                      width: "100%",
                       minHeight: 180,
-                      border: 0,
-                      background: "transparent",
-                      cursor: "pointer",
+                      border: `1px solid ${alpha("#ffffff", 0.58)}`,
+                      background: [
+                        `radial-gradient(circle at 18% 20%, ${alpha(previewSecondaryColor, 0.42)}, transparent 0 34%)`,
+                        `radial-gradient(circle at 82% 18%, ${alpha(previewAccentColor, 0.32)}, transparent 0 28%)`,
+                        `linear-gradient(145deg, ${lighten(previewBrandColor, 0.82)} 0%, ${lighten(previewSecondaryColor, 0.84)} 54%, ${lighten(previewAccentColor, 0.82)} 100%)`,
+                      ].join(", "),
+                      p: 2,
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "space-between",
                     }}
-                  />
-                  <TextField
-                    label="Hex color"
-                    value={brandColorInput}
-                    onChange={(event) => {
-                      handleBrandColorChange(event.target.value);
-                    }}
-                    placeholder="#6B7280"
-                    fullWidth
-                  />
+                  >
+                    <Stack direction="row" spacing={1}>
+                      {[previewBrandColor, previewSecondaryColor, previewAccentColor].map((color) => (
+                        <Box
+                          key={color}
+                          sx={{
+                            width: 24,
+                            height: 24,
+                            border: `1px solid ${alpha("#ffffff", 0.65)}`,
+                            backgroundColor: color,
+                          }}
+                        />
+                      ))}
+                    </Stack>
+                    <Stack spacing={1.25}>
+                      <Typography variant="h6">Jayden Gallery</Typography>
+                      <Button variant="contained" size="small" sx={{ alignSelf: "flex-start" }}>
+                        Preview Button
+                      </Button>
+                    </Stack>
+                  </Box>
+                  <Typography variant="body2" color="text.secondary">
+                    Tip: choose colors with different jobs so the palette feels layered instead
+                    of flat.
+                  </Typography>
                 </Stack>
               </Paper>
             </Stack>
@@ -1596,7 +1740,7 @@ export default function App({ defaultBrandColor }: AppProps) {
           },
           backdrop: {
             sx: {
-              backgroundColor: alpha(darken(currentBrandColor, 0.7), 0.22),
+              backgroundColor: alpha(darken(currentThemeColors.brandColor, 0.7), 0.22),
               backdropFilter: "blur(10px)",
             },
           },
@@ -1714,7 +1858,7 @@ export default function App({ defaultBrandColor }: AppProps) {
           },
           backdrop: {
             sx: {
-              backgroundColor: alpha(darken(currentBrandColor, 0.7), 0.22),
+              backgroundColor: alpha(darken(currentThemeColors.brandColor, 0.7), 0.22),
               backdropFilter: "blur(10px)",
             },
           },

@@ -31,8 +31,8 @@ body::before {
   pointer-events: none;
   opacity: 0.35;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.18) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.18) 1px, transparent 1px);
+    linear-gradient(var(--theme-grid-highlight, rgba(255, 255, 255, 0.18)) 1px, transparent 1px),
+    linear-gradient(90deg, var(--theme-grid-color, rgba(255, 255, 255, 0.18)) 1px, transparent 1px);
   background-size: 32px 32px;
   mask-image: radial-gradient(circle at center, black 32%, transparent 90%);
 }

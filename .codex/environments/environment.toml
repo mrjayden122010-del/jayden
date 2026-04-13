@@ -9,12 +9,3 @@ script = ""
 name = "Run"
 icon = "run"
 command = "npm run dev"
-
-[[actions]]
-name = "push"
-icon = "tool"
-command = '''
-git add .
-git commit -m 'new push'
-git push
-'''
