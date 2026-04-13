@@ -144,7 +144,6 @@ export default function App({ defaultBrandColor }: AppProps) {
   const [editErrorMessage, setEditErrorMessage] = useState("");
   const [countryFilter, setCountryFilter] = useState<string | null>(null);
   const [cityFilter, setCityFilter] = useState<string | null>(null);
-  const [streetAddressFilter, setStreetAddressFilter] = useState<string | null>(null);
   const [filterAnchorEl, setFilterAnchorEl] = useState<HTMLElement | null>(null);
   const [brandColorInput, setBrandColorInput] = useState(defaultBrandColor);
   const [themeErrorMessage, setThemeErrorMessage] = useState("");
@@ -262,7 +261,7 @@ export default function App({ defaultBrandColor }: AppProps) {
       editCity?.name,
   );
   const isAuthenticated = authState?.isAuthenticated ?? false;
-  const categoryOptions = categories ?? [];
+  const categoryOptions = useMemo(() => categories ?? [], [categories]);
   const filteredImages = useMemo(() => {
     if (!images) {
       return [];
@@ -271,12 +270,10 @@ export default function App({ defaultBrandColor }: AppProps) {
     return images.filter((image) => {
       const matchesCountry = !countryFilter || image.country === countryFilter;
       const matchesCity = !cityFilter || image.city === cityFilter;
-      const matchesStreetAddress =
-        !streetAddressFilter || image.streetAddress === streetAddressFilter;
 
-      return matchesCountry && matchesCity && matchesStreetAddress;
+      return matchesCountry && matchesCity;
     });
-  }, [cityFilter, countryFilter, images, streetAddressFilter]);
+  }, [cityFilter, countryFilter, images]);
   const countryFilterOptions = useMemo(
     () =>
       Array.from(new Set((images ?? []).map((image) => image.country).filter(Boolean))).sort((left, right) =>
@@ -295,19 +292,6 @@ export default function App({ defaultBrandColor }: AppProps) {
         ),
       ).sort((left, right) => left.localeCompare(right)),
     [countryFilter, images],
-  );
-  const streetAddressFilterOptions = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          (images ?? [])
-            .filter((image) => !countryFilter || image.country === countryFilter)
-            .filter((image) => !cityFilter || image.city === cityFilter)
-            .map((image) => image.streetAddress)
-            .filter(Boolean),
-        ),
-      ).sort((left, right) => left.localeCompare(right)),
-    [cityFilter, countryFilter, images],
   );
   const categoryTabs = useMemo(
     () => [{ label: "All", value: "__all__" }, ...categoryOptions.map((category) => ({ label: category, value: category }))],
@@ -554,12 +538,6 @@ export default function App({ defaultBrandColor }: AppProps) {
       setCityFilter(null);
     }
   }, [cityFilter, cityFilterOptions]);
-
-  useEffect(() => {
-    if (streetAddressFilter && !streetAddressFilterOptions.includes(streetAddressFilter)) {
-      setStreetAddressFilter(null);
-    }
-  }, [streetAddressFilter, streetAddressFilterOptions]);
 
   const handleBrandColorChange = (value: string) => {
     const normalized = normalizeHexColor(value);
@@ -1052,7 +1030,6 @@ export default function App({ defaultBrandColor }: AppProps) {
                       setSelectedCategoryFilter(value === "__all__" ? null : value);
                       setCountryFilter(null);
                       setCityFilter(null);
-                      setStreetAddressFilter(null);
                     }}
                     variant="scrollable"
                     scrollButtons="auto"
@@ -1238,16 +1215,15 @@ export default function App({ defaultBrandColor }: AppProps) {
             <Box>
               <Typography variant="h6">Filter Gallery</Typography>
               <Typography variant="body2" color="text.secondary">
-                Choose a country, city, or street address.
+                Choose a country or city.
               </Typography>
             </Box>
-            {(countryFilter || cityFilter || streetAddressFilter) ? (
+            {(countryFilter || cityFilter) ? (
               <Button
                 variant="text"
                 onClick={() => {
                   setCountryFilter(null);
                   setCityFilter(null);
-                  setStreetAddressFilter(null);
                 }}
               >
                 Clear
@@ -1271,7 +1247,6 @@ export default function App({ defaultBrandColor }: AppProps) {
                       currentCountry === country ? null : country,
                     );
                     setCityFilter(null);
-                    setStreetAddressFilter(null);
                   }}
                 />
               ))}
@@ -1291,39 +1266,12 @@ export default function App({ defaultBrandColor }: AppProps) {
                   variant={cityFilter === city ? "filled" : "outlined"}
                   onClick={() => {
                     setCityFilter((currentCity) => (currentCity === city ? null : city));
-                    setStreetAddressFilter(null);
                   }}
                 />
               ))}
               {cityFilterOptions.length === 0 ? (
                 <Typography variant="body2" color="text.secondary">
                   Pick a country to narrow the city list.
-                </Typography>
-              ) : null}
-            </Stack>
-          </Stack>
-          <Stack spacing={1.25}>
-            <Typography variant="subtitle2" color="text.secondary">
-              Street Addresses
-            </Typography>
-            <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: "wrap" }}>
-              {streetAddressFilterOptions.map((currentStreetAddress) => (
-                <Chip
-                  key={currentStreetAddress}
-                  label={currentStreetAddress}
-                  clickable
-                  color={streetAddressFilter === currentStreetAddress ? "primary" : "default"}
-                  variant={streetAddressFilter === currentStreetAddress ? "filled" : "outlined"}
-                  onClick={() =>
-                    setStreetAddressFilter((currentValue) =>
-                      currentValue === currentStreetAddress ? null : currentStreetAddress,
-                    )
-                  }
-                />
-              ))}
-              {streetAddressFilterOptions.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  Pick a city to narrow the street address list.
                 </Typography>
               ) : null}
             </Stack>
