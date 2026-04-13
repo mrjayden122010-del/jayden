@@ -21,6 +21,8 @@ import {
   Popover,
   Paper,
   Stack,
+  Tab,
+  Tabs,
   TextField,
   Toolbar,
   Typography,
@@ -48,6 +50,7 @@ const HEX_COLOR_PATTERN = /^#([0-9A-F]{6})$/;
 const ADMIN_SESSION_STORAGE_KEY = "jayden-gallery-admin-session";
 
 const normalizeHexColor = (value: string) => value.trim().toUpperCase();
+const normalizeCategoryValue = (value: string) => value.trim();
 const sortByName = (left: LocationOption, right: LocationOption) => left.name.localeCompare(right.name);
 const mimeTypeToExtension = (mimeType: string) => {
   const subtype = mimeType.split("/")[1] ?? "png";
@@ -94,7 +97,9 @@ const mapCityOption = (city: ICity): LocationOption => ({
 
 export default function App({ defaultBrandColor }: AppProps) {
   const theme = useTheme();
-  const images = useQuery(api.gallery.listImages);
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string | null>(null);
+  const images = useQuery(api.gallery.listImages, { category: selectedCategoryFilter });
+  const categories = useQuery(api.gallery.listCategories);
   const [sessionToken, setSessionToken] = useState<string | null>(() => {
     if (typeof window === "undefined") {
       return null;
@@ -120,11 +125,13 @@ export default function App({ defaultBrandColor }: AppProps) {
   const [editTitle, setEditTitle] = useState("");
   const [editCaption, setEditCaption] = useState("");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState("");
   const [title, setTitle] = useState("");
   const [caption, setCaption] = useState("");
   const [selectedCountry, setSelectedCountry] = useState<LocationOption | null>(null);
   const [selectedCity, setSelectedCity] = useState<LocationOption | null>(null);
   const [streetAddress, setStreetAddress] = useState("");
+  const [editCategory, setEditCategory] = useState("");
   const [editCountry, setEditCountry] = useState<LocationOption | null>(null);
   const [editCity, setEditCity] = useState<LocationOption | null>(null);
   const [editStreetAddress, setEditStreetAddress] = useState("");
@@ -232,6 +239,7 @@ export default function App({ defaultBrandColor }: AppProps) {
   }, [editCity, editCityOptions]);
 
   const isFormValid = Boolean(
+    selectedCategory.trim() !== "" &&
     title.trim() !== "" &&
       caption.trim() !== "" &&
       selectedFile &&
@@ -247,12 +255,14 @@ export default function App({ defaultBrandColor }: AppProps) {
   }, [selectedFile]);
   const currentBrandColor = defaultBrandColor;
   const isEditFormValid = Boolean(
+    editCategory.trim() !== "" &&
     editTitle.trim() !== "" &&
       editCaption.trim() !== "" &&
       editCountry?.name &&
       editCity?.name,
   );
   const isAuthenticated = authState?.isAuthenticated ?? false;
+  const categoryOptions = categories ?? [];
   const filteredImages = useMemo(() => {
     if (!images) {
       return [];
@@ -298,6 +308,10 @@ export default function App({ defaultBrandColor }: AppProps) {
         ),
       ).sort((left, right) => left.localeCompare(right)),
     [cityFilter, countryFilter, images],
+  );
+  const categoryTabs = useMemo(
+    () => [{ label: "All", value: "__all__" }, ...categoryOptions.map((category) => ({ label: category, value: category }))],
+    [categoryOptions],
   );
 
   const clearSession = () => {
@@ -353,6 +367,7 @@ export default function App({ defaultBrandColor }: AppProps) {
   };
 
   const resetForm = () => {
+    setSelectedCategory("");
     setTitle("");
     setCaption("");
     setSelectedCountry(null);
@@ -391,6 +406,7 @@ export default function App({ defaultBrandColor }: AppProps) {
 
     setIsSavingEdit(false);
     setEditingImageId(null);
+    setEditCategory("");
     setEditTitle("");
     setEditCaption("");
     setEditCountry(null);
@@ -420,6 +436,7 @@ export default function App({ defaultBrandColor }: AppProps) {
       (image.country ? { code: image.country, name: image.country } : null);
 
     setEditingImageId(image._id);
+    setEditCategory(image.category ?? "");
     setEditTitle(image.title);
     setEditCaption(image.caption);
     setEditCountry(matchingCountry);
@@ -599,7 +616,7 @@ export default function App({ defaultBrandColor }: AppProps) {
     }
 
     if (!title.trim() || !caption.trim() || !selectedCountry?.name || !selectedCity?.name) {
-      setErrorMessage("Please add a title, caption, country, and city.");
+      setErrorMessage("Please add a category, title, caption, country, and city.");
       return;
     }
 
@@ -625,6 +642,7 @@ export default function App({ defaultBrandColor }: AppProps) {
       await createImageEntry({
         sessionToken: activeSessionToken,
         storageId,
+        category: normalizeCategoryValue(selectedCategory),
         title,
         caption,
         country: selectedCountry.name,
@@ -654,8 +672,8 @@ export default function App({ defaultBrandColor }: AppProps) {
       return;
     }
 
-    if (!editTitle.trim() || !editCaption.trim() || !editCountry?.name || !editCity?.name) {
-      setEditErrorMessage("Please update the title, caption, country, and city.");
+    if (!editCategory.trim() || !editTitle.trim() || !editCaption.trim() || !editCountry?.name || !editCity?.name) {
+      setEditErrorMessage("Please update the category, title, caption, country, and city.");
       return;
     }
 
@@ -666,6 +684,7 @@ export default function App({ defaultBrandColor }: AppProps) {
       await updateImageEntry({
         sessionToken: activeSessionToken,
         imageId: editingImageId,
+        category: normalizeCategoryValue(editCategory),
         title: editTitle,
         caption: editCaption,
         country: editCountry.name,
@@ -675,6 +694,7 @@ export default function App({ defaultBrandColor }: AppProps) {
 
       setIsSavingEdit(false);
       setEditingImageId(null);
+      setEditCategory("");
       setEditTitle("");
       setEditCaption("");
       setEditStreetAddress("");
@@ -1004,19 +1024,67 @@ export default function App({ defaultBrandColor }: AppProps) {
               }}
             >
               <Typography variant="h4" gutterBottom>
-                No images match this location yet.
+                No images match this view yet.
               </Typography>
               <Typography color="text.secondary">
-                Try a different country, city, or street address filter to see more artwork.
+                Try another category tab or adjust the location filters to see more artwork.
               </Typography>
             </Paper>
           ) : (
             <Stack spacing={2.5}>
-              <Stack direction="row" sx={{ justifyContent: "flex-end" }}>
+              <Stack
+                direction={{ xs: "column", lg: "row" }}
+                spacing={2}
+                sx={{ alignItems: { lg: "center" }, justifyContent: "space-between" }}
+              >
+                <Box
+                  sx={{
+                    minWidth: 0,
+                    flex: 1,
+                    border: `1px solid ${alpha(theme.palette.primary.dark, 0.14)}`,
+                    backgroundColor: alpha("#ffffff", 0.54),
+                    boxShadow: `inset 0 0 0 1px ${alpha("#ffffff", 0.42)}`,
+                  }}
+                >
+                  <Tabs
+                    value={selectedCategoryFilter ?? "__all__"}
+                    onChange={(_, value: string) => {
+                      setSelectedCategoryFilter(value === "__all__" ? null : value);
+                      setCountryFilter(null);
+                      setCityFilter(null);
+                      setStreetAddressFilter(null);
+                    }}
+                    variant="scrollable"
+                    scrollButtons="auto"
+                    aria-label="Gallery categories"
+                    sx={{
+                      minHeight: 0,
+                      "& .MuiTabs-indicator": {
+                        height: 3,
+                      },
+                      "& .MuiTab-root": {
+                        minHeight: 0,
+                        px: 2.5,
+                        py: 1.75,
+                        fontWeight: 700,
+                        letterSpacing: "0.01em",
+                      },
+                    }}
+                  >
+                    {categoryTabs.map((categoryTab) => (
+                      <Tab
+                        key={categoryTab.value}
+                        label={categoryTab.label}
+                        value={categoryTab.value}
+                      />
+                    ))}
+                  </Tabs>
+                </Box>
                 <IconButton
                   aria-label="Filter images"
                   onClick={(event) => setFilterAnchorEl(event.currentTarget)}
                   sx={{
+                    alignSelf: { xs: "flex-end", lg: "center" },
                     border: `1px solid ${alpha(theme.palette.primary.dark, 0.18)}`,
                     backgroundColor: alpha("#ffffff", 0.76),
                   }}
@@ -1078,6 +1146,14 @@ export default function App({ defaultBrandColor }: AppProps) {
                       )}
                       <CardContent sx={{ flexGrow: 1 }}>
                         <Stack spacing={1.5}>
+                          {image.category ? (
+                            <Chip
+                              label={image.category}
+                              color="primary"
+                              variant="filled"
+                              sx={{ alignSelf: "flex-start" }}
+                            />
+                          ) : null}
                           <Typography variant="h5">{image.title}</Typography>
                           <Typography variant="body1" color="text.secondary">
                             {image.caption}
@@ -1394,6 +1470,14 @@ export default function App({ defaultBrandColor }: AppProps) {
                   )}
                 </Box>
                 <Stack spacing={1}>
+                  {activeImage.category ? (
+                    <Chip
+                      label={activeImage.category}
+                      color="primary"
+                      variant="filled"
+                      sx={{ alignSelf: "flex-start" }}
+                    />
+                  ) : null}
                   <Typography variant="h6">About this artwork</Typography>
                   <Typography variant="body1" color="text.secondary">
                     {activeImage.caption}
@@ -1579,6 +1663,21 @@ export default function App({ defaultBrandColor }: AppProps) {
         <DialogContent>
           <Stack spacing={2.5} sx={{ pt: 1 }}>
             {editErrorMessage ? <Alert severity="error">{editErrorMessage}</Alert> : null}
+            <Autocomplete
+              freeSolo
+              options={categoryOptions}
+              value={editCategory}
+              onInputChange={(_, value) => setEditCategory(value)}
+              onChange={(_, value) => setEditCategory(typeof value === "string" ? value : value ?? "")}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Category"
+                  required
+                  helperText="Select an existing category or type a new one."
+                />
+              )}
+            />
             <TextField
               label="Title"
               value={editTitle}
@@ -1779,6 +1878,23 @@ export default function App({ defaultBrandColor }: AppProps) {
             <Typography variant="body2" color="text.secondary">
               {helperText}
             </Typography>
+            <Autocomplete
+              freeSolo
+              options={categoryOptions}
+              value={selectedCategory}
+              onInputChange={(_, value) => setSelectedCategory(value)}
+              onChange={(_, value) =>
+                setSelectedCategory(typeof value === "string" ? value : value ?? "")
+              }
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Category"
+                  required
+                  helperText="Select an existing category or type a new one."
+                />
+              )}
+            />
             <TextField
               label="Title"
               value={title}

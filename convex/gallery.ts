@@ -124,6 +124,7 @@ export const createImageEntry = mutation({
   args: {
     sessionToken: v.string(),
     storageId: v.id("_storage"),
+    category: v.string(),
     title: v.string(),
     caption: v.string(),
     country: v.string(),
@@ -132,11 +133,16 @@ export const createImageEntry = mutation({
   },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);
+    const category = args.category.trim();
     const title = args.title.trim();
     const caption = args.caption.trim();
     const country = args.country.trim();
     const city = args.city.trim();
     const streetAddress = args.streetAddress?.trim();
+
+    if (!category) {
+      throw new Error("Category is required.");
+    }
 
     if (!title) {
       throw new Error("Title is required.");
@@ -156,6 +162,7 @@ export const createImageEntry = mutation({
 
     return await ctx.db.insert("images", {
       storageId: args.storageId,
+      category,
       title,
       caption,
       country,
@@ -169,6 +176,7 @@ export const updateImageEntry = mutation({
   args: {
     sessionToken: v.string(),
     imageId: v.id("images"),
+    category: v.string(),
     title: v.string(),
     caption: v.string(),
     country: v.string(),
@@ -177,11 +185,16 @@ export const updateImageEntry = mutation({
   },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);
+    const category = args.category.trim();
     const title = args.title.trim();
     const caption = args.caption.trim();
     const country = args.country.trim();
     const city = args.city.trim();
     const streetAddress = args.streetAddress?.trim();
+
+    if (!category) {
+      throw new Error("Category is required.");
+    }
 
     if (!title) {
       throw new Error("Title is required.");
@@ -200,6 +213,7 @@ export const updateImageEntry = mutation({
     }
 
     await ctx.db.patch("images", args.imageId, {
+      category,
       title,
       caption,
       country,
@@ -212,14 +226,24 @@ export const updateImageEntry = mutation({
 });
 
 export const listImages = query({
-  args: {},
-  handler: async (ctx) => {
-    const images = await ctx.db.query("images").order("desc").collect();
+  args: {
+    category: v.union(v.string(), v.null()),
+  },
+  handler: async (ctx, args) => {
+    const category = args.category?.trim() ?? "";
+    const images = category
+      ? await ctx.db
+          .query("images")
+          .withIndex("by_category", (q) => q.eq("category", category))
+          .order("desc")
+          .collect()
+      : await ctx.db.query("images").order("desc").collect();
 
     return await Promise.all(
       images.map(async (image) => ({
         _id: image._id,
         _creationTime: image._creationTime,
+        category: image.category ?? "",
         title: image.title,
         caption: image.caption,
         country: image.country ?? "",
@@ -228,6 +252,20 @@ export const listImages = query({
         imageUrl: await ctx.storage.getUrl(image.storageId),
       })),
     );
+  },
+});
+
+export const listCategories = query({
+  args: {},
+  handler: async (ctx) => {
+    const images = await ctx.db.query("images").order("desc").collect();
+    return Array.from(
+      new Set(
+        images
+          .map((image) => image.category?.trim() ?? "")
+          .filter((category) => category.length > 0),
+      ),
+    ).sort((left, right) => left.localeCompare(right));
   },
 });
 
