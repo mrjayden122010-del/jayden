@@ -301,6 +301,8 @@ export const getThemeSettings = query({
     return settings
       ? {
           brandColor: settings.brandColor,
+          secondaryColor: settings.secondaryColor ?? settings.brandColor,
+          accentColor: settings.accentColor ?? settings.brandColor,
         }
       : null;
   },
@@ -310,13 +312,21 @@ export const saveThemeSettings = mutation({
   args: {
     sessionToken: v.string(),
     brandColor: v.string(),
+    secondaryColor: v.string(),
+    accentColor: v.string(),
   },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);
     const brandColor = normalizeHexColor(args.brandColor);
+    const secondaryColor = normalizeHexColor(args.secondaryColor);
+    const accentColor = normalizeHexColor(args.accentColor);
 
-    if (!HEX_COLOR_PATTERN.test(brandColor)) {
-      throw new Error("Please provide a valid 6-digit hex color.");
+    if (
+      !HEX_COLOR_PATTERN.test(brandColor) ||
+      !HEX_COLOR_PATTERN.test(secondaryColor) ||
+      !HEX_COLOR_PATTERN.test(accentColor)
+    ) {
+      throw new Error("Please provide three valid 6-digit hex colors.");
     }
 
     const existingSettings = await ctx.db
@@ -325,19 +335,27 @@ export const saveThemeSettings = mutation({
       .unique();
 
     if (existingSettings) {
-      await ctx.db.patch("siteSettings", existingSettings._id, { brandColor });
+      await ctx.db.patch("siteSettings", existingSettings._id, {
+        brandColor,
+        secondaryColor,
+        accentColor,
+      });
     } else {
       await ctx.db.insert("siteSettings", {
         key: THEME_SETTINGS_KEY,
         brandColor,
+        secondaryColor,
+        accentColor,
       });
     }
 
     await ctx.scheduler.runAfter(0, internal.lineNotifications.sendGroupMessage, {
       event: "theme_changed",
       brandColor,
+      secondaryColor,
+      accentColor,
     });
 
-    return { brandColor };
+    return { brandColor, secondaryColor, accentColor };
   },
 });

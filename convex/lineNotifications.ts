@@ -17,6 +17,8 @@ export const sendGroupMessage = internalAction({
     city: v.optional(v.string()),
     streetAddress: v.optional(v.string()),
     brandColor: v.optional(v.string()),
+    secondaryColor: v.optional(v.string()),
+    accentColor: v.optional(v.string()),
   },
   handler: async (_ctx, args) => {
     const accessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN?.trim();
@@ -28,7 +30,7 @@ export const sendGroupMessage = internalAction({
 
     const text =
       args.event === "theme_changed"
-        ? `Jayden changed gallery color: ${args.brandColor}`
+        ? `Jayden changed gallery colors: ${[args.brandColor, args.secondaryColor, args.accentColor].filter(Boolean).join(", ")}`
         : `Jayden ${args.event === "created" ? "added" : "updated"}: ${args.title} | ${args.category} | ${formatLocation([args.streetAddress, args.city, args.country])}`;
 
     const response = await fetch(LINE_PUSH_ENDPOINT, {

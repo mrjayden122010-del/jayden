@@ -28,5 +28,7 @@ export default defineSchema({
   siteSettings: defineTable({
     key: v.string(),
     brandColor: v.string(),
+    secondaryColor: v.optional(v.string()),
+    accentColor: v.optional(v.string()),
   }).index("by_key", ["key"]),
 });
