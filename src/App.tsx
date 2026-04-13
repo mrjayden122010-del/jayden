@@ -41,6 +41,7 @@ type ThemeColors = {
   brandColor: string;
   secondaryColor: string;
   accentColor: string;
+  textColor: string;
 };
 
 type AppProps = {
@@ -154,6 +155,7 @@ export default function App({ defaultThemeColors }: AppProps) {
   const [brandColorInput, setBrandColorInput] = useState(defaultThemeColors.brandColor);
   const [secondaryColorInput, setSecondaryColorInput] = useState(defaultThemeColors.secondaryColor);
   const [accentColorInput, setAccentColorInput] = useState(defaultThemeColors.accentColor);
+  const [textColorInput, setTextColorInput] = useState(defaultThemeColors.textColor);
   const [themeErrorMessage, setThemeErrorMessage] = useState("");
   const [isSavingTheme, setIsSavingTheme] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState<number | null>(null);
@@ -163,6 +165,7 @@ export default function App({ defaultThemeColors }: AppProps) {
       setBrandColorInput(defaultThemeColors.brandColor);
       setSecondaryColorInput(defaultThemeColors.secondaryColor);
       setAccentColorInput(defaultThemeColors.accentColor);
+      setTextColorInput(defaultThemeColors.textColor);
       setThemeErrorMessage("");
     }
   }, [defaultThemeColors, isThemeDialogOpen]);
@@ -272,6 +275,9 @@ export default function App({ defaultThemeColors }: AppProps) {
   const previewAccentColor = HEX_COLOR_PATTERN.test(accentColorInput)
     ? accentColorInput
     : currentThemeColors.accentColor;
+  const previewTextColor = HEX_COLOR_PATTERN.test(textColorInput)
+    ? textColorInput
+    : currentThemeColors.textColor;
   const isEditFormValid = Boolean(
     editCategory.trim() !== "" &&
     editTitle.trim() !== "" &&
@@ -401,6 +407,7 @@ export default function App({ defaultThemeColors }: AppProps) {
     setBrandColorInput(defaultThemeColors.brandColor);
     setSecondaryColorInput(defaultThemeColors.secondaryColor);
     setAccentColorInput(defaultThemeColors.accentColor);
+    setTextColorInput(defaultThemeColors.textColor);
     setThemeErrorMessage("");
   };
 
@@ -575,6 +582,10 @@ export default function App({ defaultThemeColors }: AppProps) {
       setAccentColorInput(normalized);
     }
 
+    if (key === "textColor") {
+      setTextColorInput(normalized);
+    }
+
     setThemeErrorMessage("");
   };
 
@@ -591,13 +602,15 @@ export default function App({ defaultThemeColors }: AppProps) {
     const normalizedBrandColor = normalizeHexColor(brandColorInput);
     const normalizedSecondaryColor = normalizeHexColor(secondaryColorInput);
     const normalizedAccentColor = normalizeHexColor(accentColorInput);
+    const normalizedTextColor = normalizeHexColor(textColorInput);
 
     if (
       !HEX_COLOR_PATTERN.test(normalizedBrandColor) ||
       !HEX_COLOR_PATTERN.test(normalizedSecondaryColor) ||
-      !HEX_COLOR_PATTERN.test(normalizedAccentColor)
+      !HEX_COLOR_PATTERN.test(normalizedAccentColor) ||
+      !HEX_COLOR_PATTERN.test(normalizedTextColor)
     ) {
-      setThemeErrorMessage("Enter three full 6-digit hex colors like #6B7280.");
+      setThemeErrorMessage("Enter four full 6-digit hex colors like #6B7280.");
       return;
     }
 
@@ -610,6 +623,7 @@ export default function App({ defaultThemeColors }: AppProps) {
         brandColor: normalizedBrandColor,
         secondaryColor: normalizedSecondaryColor,
         accentColor: normalizedAccentColor,
+        textColor: normalizedTextColor,
       });
       setIsThemeDialogOpen(false);
     } catch (error) {
@@ -900,6 +914,7 @@ export default function App({ defaultThemeColors }: AppProps) {
                       setBrandColorInput(defaultThemeColors.brandColor);
                       setSecondaryColorInput(defaultThemeColors.secondaryColor);
                       setAccentColorInput(defaultThemeColors.accentColor);
+                      setTextColorInput(defaultThemeColors.textColor);
                       setThemeErrorMessage("");
                       setIsThemeDialogOpen(true);
                     }}
@@ -1548,10 +1563,10 @@ export default function App({ defaultThemeColors }: AppProps) {
         }}
       >
         <DialogTitle sx={{ pb: 1 }}>
-          <Typography variant="h4">Choose three gallery colors</Typography>
+          <Typography variant="h4">Choose your gallery colors</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
-            Pick a main color, a warm support color, and an accent. The page blends all
-            three across the background, buttons, cards, and dialogs once you save.
+            Pick the main palette plus a text color. The page blends the palette through
+            the background and UI, then applies your text color across the whole site.
           </Typography>
         </DialogTitle>
         <DialogContent>
@@ -1596,6 +1611,13 @@ export default function App({ defaultThemeColors }: AppProps) {
                       helperText: "Used for contrast, motion points, and bright finishing touches.",
                       value: accentColorInput,
                       fallback: currentThemeColors.accentColor,
+                    },
+                    {
+                      key: "textColor" as const,
+                      label: "Text color",
+                      helperText: "Applied to headings, body copy, and the main readable text across the site.",
+                      value: textColorInput,
+                      fallback: currentThemeColors.textColor,
                     },
                   ].map((colorField) => (
                     <Paper
@@ -1674,10 +1696,11 @@ export default function App({ defaultThemeColors }: AppProps) {
                       display: "flex",
                       flexDirection: "column",
                       justifyContent: "space-between",
+                      color: previewTextColor,
                     }}
                   >
                     <Stack direction="row" spacing={1}>
-                      {[previewBrandColor, previewSecondaryColor, previewAccentColor].map((color) => (
+                      {[previewBrandColor, previewSecondaryColor, previewAccentColor, previewTextColor].map((color) => (
                         <Box
                           key={color}
                           sx={{
@@ -1694,6 +1717,9 @@ export default function App({ defaultThemeColors }: AppProps) {
                       <Button variant="contained" size="small" sx={{ alignSelf: "flex-start" }}>
                         Preview Button
                       </Button>
+                      <Typography variant="body2" sx={{ color: alpha(previewTextColor, 0.8) }}>
+                        Preview text now follows your chosen site text color.
+                      </Typography>
                     </Stack>
                   </Box>
                   <Typography variant="body2" color="text.secondary">

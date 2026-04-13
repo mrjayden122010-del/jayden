@@ -303,6 +303,7 @@ export const getThemeSettings = query({
           brandColor: settings.brandColor,
           secondaryColor: settings.secondaryColor ?? settings.brandColor,
           accentColor: settings.accentColor ?? settings.brandColor,
+          textColor: settings.textColor ?? settings.brandColor,
         }
       : null;
   },
@@ -314,19 +315,22 @@ export const saveThemeSettings = mutation({
     brandColor: v.string(),
     secondaryColor: v.string(),
     accentColor: v.string(),
+    textColor: v.string(),
   },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);
     const brandColor = normalizeHexColor(args.brandColor);
     const secondaryColor = normalizeHexColor(args.secondaryColor);
     const accentColor = normalizeHexColor(args.accentColor);
+    const textColor = normalizeHexColor(args.textColor);
 
     if (
       !HEX_COLOR_PATTERN.test(brandColor) ||
       !HEX_COLOR_PATTERN.test(secondaryColor) ||
-      !HEX_COLOR_PATTERN.test(accentColor)
+      !HEX_COLOR_PATTERN.test(accentColor) ||
+      !HEX_COLOR_PATTERN.test(textColor)
     ) {
-      throw new Error("Please provide three valid 6-digit hex colors.");
+      throw new Error("Please provide four valid 6-digit hex colors.");
     }
 
     const existingSettings = await ctx.db
@@ -339,6 +343,7 @@ export const saveThemeSettings = mutation({
         brandColor,
         secondaryColor,
         accentColor,
+        textColor,
       });
     } else {
       await ctx.db.insert("siteSettings", {
@@ -346,6 +351,7 @@ export const saveThemeSettings = mutation({
         brandColor,
         secondaryColor,
         accentColor,
+        textColor,
       });
     }
 
@@ -354,8 +360,9 @@ export const saveThemeSettings = mutation({
       brandColor,
       secondaryColor,
       accentColor,
+      textColor,
     });
 
-    return { brandColor, secondaryColor, accentColor };
+    return { brandColor, secondaryColor, accentColor, textColor };
   },
 });

@@ -5,7 +5,6 @@ import {
   ThemeProvider,
   alpha,
   createTheme,
-  darken,
   getContrastRatio,
   lighten,
 } from "@mui/material/styles";
@@ -16,12 +15,14 @@ export type ThemeColors = {
   brandColor: string;
   secondaryColor: string;
   accentColor: string;
+  textColor: string;
 };
 
 const DEFAULT_THEME_COLORS: ThemeColors = {
   brandColor: "#6B7280",
   secondaryColor: "#D97706",
   accentColor: "#0F766E",
+  textColor: "#1F2933",
 };
 
 const HEX_COLOR_PATTERN = /^#([0-9A-F]{6})$/;
@@ -36,11 +37,12 @@ const resolveThemeColors = (themeColors: Partial<ThemeColors> | null | undefined
   secondaryColor:
     normalizeHexColor(themeColors?.secondaryColor ?? "") ?? DEFAULT_THEME_COLORS.secondaryColor,
   accentColor: normalizeHexColor(themeColors?.accentColor ?? "") ?? DEFAULT_THEME_COLORS.accentColor,
+  textColor: normalizeHexColor(themeColors?.textColor ?? "") ?? DEFAULT_THEME_COLORS.textColor,
 });
 
 const buildTheme = (themeColors: ThemeColors) => {
   const safeThemeColors = resolveThemeColors(themeColors);
-  const { brandColor, secondaryColor, accentColor } = safeThemeColors;
+  const { brandColor, secondaryColor, accentColor, textColor } = safeThemeColors;
   const baseTheme = createTheme({
     palette: {
       mode: "light",
@@ -64,8 +66,8 @@ const buildTheme = (themeColors: ThemeColors) => {
 
   const backgroundDefault = lighten(brandColor, 0.92);
   const backgroundPaper = alpha(lighten(brandColor, 0.98), 0.9);
-  const textPrimary = darken(brandColor, 0.76);
-  const textSecondary = alpha(darken(brandColor, 0.6), 0.78);
+  const textPrimary = textColor;
+  const textSecondary = alpha(textColor, 0.78);
   const buttonText =
     getContrastRatio(primary.main, "#ffffff") >= 4.5 ? "#ffffff" : textPrimary;
 
@@ -129,8 +131,10 @@ const buildTheme = (themeColors: ThemeColors) => {
             colorScheme: "light",
             "--theme-grid-color": alpha(secondary.main, 0.18),
             "--theme-grid-highlight": alpha("#ffffff", 0.18),
+            "--theme-text-color": textPrimary,
           },
           body: {
+            color: textPrimary,
             background: [
               `radial-gradient(circle at 14% 20%, ${alpha(lighten(secondary.main, 0.18), 0.3)}, transparent 0 24%)`,
               `radial-gradient(circle at 82% 16%, ${alpha(info.main, 0.18)}, transparent 0 22%)`,
