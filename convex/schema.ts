@@ -17,6 +17,14 @@ export default defineSchema({
   })
     .index("by_category", ["category"])
     .index("by_country_and_city", ["country", "city"]),
+  lineWebhookSources: defineTable({
+    sourceType: v.union(v.literal("group"), v.literal("room"), v.literal("user")),
+    sourceId: v.string(),
+    lastEventType: v.string(),
+    lastSeenAt: v.number(),
+  })
+    .index("by_source_type_and_source_id", ["sourceType", "sourceId"])
+    .index("by_last_seen_at", ["lastSeenAt"]),
   siteSettings: defineTable({
     key: v.string(),
     brandColor: v.string(),

@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query, type MutationCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
 
 const ADMIN_PASSWORD = "Jayden612";
 const SESSION_DURATION_MS = 1000 * 60 * 60 * 24 * 30;
@@ -160,7 +161,7 @@ export const createImageEntry = mutation({
       throw new Error("City is required.");
     }
 
-    return await ctx.db.insert("images", {
+    const imageId = await ctx.db.insert("images", {
       storageId: args.storageId,
       category,
       title,
@@ -169,6 +170,17 @@ export const createImageEntry = mutation({
       city,
       streetAddress: streetAddress || undefined,
     });
+
+    await ctx.scheduler.runAfter(0, internal.lineNotifications.sendGroupMessage, {
+      event: "created",
+      title,
+      category,
+      country,
+      city,
+      streetAddress: streetAddress || undefined,
+    });
+
+    return imageId;
   },
 });
 
@@ -216,6 +228,15 @@ export const updateImageEntry = mutation({
       category,
       title,
       caption,
+      country,
+      city,
+      streetAddress: streetAddress || undefined,
+    });
+
+    await ctx.scheduler.runAfter(0, internal.lineNotifications.sendGroupMessage, {
+      event: "updated",
+      title,
+      category,
       country,
       city,
       streetAddress: streetAddress || undefined,

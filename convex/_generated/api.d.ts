@@ -9,6 +9,9 @@
  */
 
 import type * as gallery from "../gallery.js";
+import type * as http from "../http.js";
+import type * as lineNotifications from "../lineNotifications.js";
+import type * as lineWebhook from "../lineWebhook.js";
 
 import type {
   ApiFromModules,
@@ -18,6 +21,9 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   gallery: typeof gallery;
+  http: typeof http;
+  lineNotifications: typeof lineNotifications;
+  lineWebhook: typeof lineWebhook;
 }>;
 
 /**
