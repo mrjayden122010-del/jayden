@@ -10,12 +10,13 @@ const formatLocation = (parts: Array<string | undefined>) =>
 
 export const sendGroupMessage = internalAction({
   args: {
-    event: v.union(v.literal("created"), v.literal("updated")),
-    title: v.string(),
-    category: v.string(),
-    country: v.string(),
-    city: v.string(),
+    event: v.union(v.literal("created"), v.literal("updated"), v.literal("theme_changed")),
+    title: v.optional(v.string()),
+    category: v.optional(v.string()),
+    country: v.optional(v.string()),
+    city: v.optional(v.string()),
     streetAddress: v.optional(v.string()),
+    brandColor: v.optional(v.string()),
   },
   handler: async (_ctx, args) => {
     const accessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN?.trim();
@@ -25,9 +26,10 @@ export const sendGroupMessage = internalAction({
       return { sent: false, reason: "missing_config" as const };
     }
 
-    const actionLabel = args.event === "created" ? "added" : "updated";
-    const location = formatLocation([args.streetAddress, args.city, args.country]);
-    const text = `Jayden ${actionLabel}: ${args.title} | ${args.category} | ${location}`;
+    const text =
+      args.event === "theme_changed"
+        ? `Jayden changed gallery color: ${args.brandColor}`
+        : `Jayden ${args.event === "created" ? "added" : "updated"}: ${args.title} | ${args.category} | ${formatLocation([args.streetAddress, args.city, args.country])}`;
 
     const response = await fetch(LINE_PUSH_ENDPOINT, {
       method: "POST",

@@ -333,6 +333,11 @@ export const saveThemeSettings = mutation({
       });
     }
 
+    await ctx.scheduler.runAfter(0, internal.lineNotifications.sendGroupMessage, {
+      event: "theme_changed",
+      brandColor,
+    });
+
     return { brandColor };
   },
 });
