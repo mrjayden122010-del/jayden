@@ -14,6 +14,7 @@ const MAX_VISITOR_ID_LENGTH = 120;
 
 const normalizeHexColor = (value: string) => value.trim().toUpperCase();
 const now = () => Date.now();
+const THEME_SURFACES = ["ai", "art"] as const;
 
 const countCommentsForImage = async (
   ctx: QueryCtx | MutationCtx,
@@ -592,20 +593,24 @@ export const getThemeSettings = query({
   args: {
     surface: v.union(v.literal("ai"), v.literal("art")),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx) => {
     const settings =
       (await ctx.db
         .query("siteSettings")
         .withIndex("by_surface_and_key", (q) =>
-          q.eq("surface", args.surface).eq("key", THEME_SETTINGS_KEY),
+          q.eq("surface", "ai").eq("key", THEME_SETTINGS_KEY),
         )
         .unique()) ??
-      (args.surface === "ai"
-        ? await ctx.db
-            .query("siteSettings")
-            .withIndex("by_key", (q) => q.eq("key", THEME_SETTINGS_KEY))
-            .unique()
-        : null);
+      (await ctx.db
+        .query("siteSettings")
+        .withIndex("by_surface_and_key", (q) =>
+          q.eq("surface", "art").eq("key", THEME_SETTINGS_KEY),
+        )
+        .unique()) ??
+      (await ctx.db
+        .query("siteSettings")
+        .withIndex("by_key", (q) => q.eq("key", THEME_SETTINGS_KEY))
+        .unique());
 
     return settings
       ? {
@@ -643,30 +648,32 @@ export const saveThemeSettings = mutation({
       throw new Error("Please provide four valid 6-digit hex colors.");
     }
 
-    const existingSettings = await ctx.db
-      .query("siteSettings")
-      .withIndex("by_surface_and_key", (q) =>
-        q.eq("surface", args.surface).eq("key", THEME_SETTINGS_KEY),
-      )
-      .unique();
+    for (const surface of THEME_SURFACES) {
+      const existingSettings = await ctx.db
+        .query("siteSettings")
+        .withIndex("by_surface_and_key", (q) =>
+          q.eq("surface", surface).eq("key", THEME_SETTINGS_KEY),
+        )
+        .unique();
 
-    if (existingSettings) {
-      await ctx.db.patch("siteSettings", existingSettings._id, {
-        surface: args.surface,
-        brandColor,
-        secondaryColor,
-        accentColor,
-        textColor,
-      });
-    } else {
-      await ctx.db.insert("siteSettings", {
-        key: THEME_SETTINGS_KEY,
-        surface: args.surface,
-        brandColor,
-        secondaryColor,
-        accentColor,
-        textColor,
-      });
+      if (existingSettings) {
+        await ctx.db.patch("siteSettings", existingSettings._id, {
+          surface,
+          brandColor,
+          secondaryColor,
+          accentColor,
+          textColor,
+        });
+      } else {
+        await ctx.db.insert("siteSettings", {
+          key: THEME_SETTINGS_KEY,
+          surface,
+          brandColor,
+          secondaryColor,
+          accentColor,
+          textColor,
+        });
+      }
     }
 
     await ctx.scheduler.runAfter(0, internal.lineNotifications.sendGroupMessage, {
