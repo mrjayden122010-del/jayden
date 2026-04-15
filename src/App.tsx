@@ -20,7 +20,6 @@ import {
   IconButton,
   Menu,
   MenuItem,
-  Popover,
   Paper,
   Stack,
   SvgIcon,
@@ -33,7 +32,6 @@ import {
 import type { SvgIconProps } from "@mui/material/SvgIcon";
 import { alpha, darken, lighten, useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import { City, Country, type ICity, type ICountry } from "country-state-city";
 import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
 
@@ -50,11 +48,6 @@ type ThemeColors = {
 
 type AppProps = {
   defaultThemeColors: ThemeColors;
-};
-
-type LocationOption = {
-  code: string;
-  name: string;
 };
 
 type AppRoute = "/" | "/ai" | "/art";
@@ -78,7 +71,6 @@ const normalizeAppPath = (pathname: string): AppRoute => {
 
 const normalizeHexColor = (value: string) => value.trim().toUpperCase();
 const normalizeCategoryValue = (value: string) => value.trim();
-const sortByName = (left: LocationOption, right: LocationOption) => left.name.localeCompare(right.name);
 const mimeTypeToExtension = (mimeType: string) => {
   const subtype = mimeType.split("/")[1] ?? "png";
 
@@ -112,16 +104,6 @@ const extractImageFileFromClipboardData = (clipboardData: DataTransfer | null) =
   return null;
 };
 
-const mapCountryOption = (country: ICountry): LocationOption => ({
-  code: country.isoCode,
-  name: country.name,
-});
-
-const mapCityOption = (city: ICity): LocationOption => ({
-  code: `${city.countryCode}-${city.stateCode}-${city.name}`,
-  name: city.name,
-});
-
 const LoginOutlinedIcon = (props: SvgIconProps) => (
   <SvgIcon {...props}>
     <path d="M10.09 15.59 11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67z" />
@@ -133,12 +115,6 @@ const LogoutOutlinedIcon = (props: SvgIconProps) => (
   <SvgIcon {...props}>
     <path d="m17 7-1.41 1.41L17.17 10H8v2h9.17l-1.58 1.59L17 15l5-5z" />
     <path d="M4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4z" />
-  </SvgIcon>
-);
-
-const FilterAltOutlinedIcon = (props: SvgIconProps) => (
-  <SvgIcon {...props}>
-    <path d="M7 6h10l-3.55 4.73-.45.6V17l-2 1v-6.67l-.45-.6zM4.25 4A1.25 1.25 0 0 0 3 5.25c0 .27.09.53.25.75L9 13.67V20l6-3v-3.33L20.75 6c.16-.22.25-.48.25-.75A1.25 1.25 0 0 0 19.75 4z" />
   </SvgIcon>
 );
 
@@ -239,13 +215,7 @@ export default function App({ defaultThemeColors }: AppProps) {
   const [selectedCategory, setSelectedCategory] = useState("");
   const [title, setTitle] = useState("");
   const [caption, setCaption] = useState("");
-  const [selectedCountry, setSelectedCountry] = useState<LocationOption | null>(null);
-  const [selectedCity, setSelectedCity] = useState<LocationOption | null>(null);
-  const [streetAddress, setStreetAddress] = useState("");
   const [editCategory, setEditCategory] = useState("");
-  const [editCountry, setEditCountry] = useState<LocationOption | null>(null);
-  const [editCity, setEditCity] = useState<LocationOption | null>(null);
-  const [editStreetAddress, setEditStreetAddress] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isDragActive, setIsDragActive] = useState(false);
@@ -253,9 +223,6 @@ export default function App({ defaultThemeColors }: AppProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [editErrorMessage, setEditErrorMessage] = useState("");
-  const [countryFilter, setCountryFilter] = useState<string | null>(null);
-  const [cityFilter, setCityFilter] = useState<string | null>(null);
-  const [filterAnchorEl, setFilterAnchorEl] = useState<HTMLElement | null>(null);
   const [brandColorInput, setBrandColorInput] = useState(defaultThemeColors.brandColor);
   const [secondaryColorInput, setSecondaryColorInput] = useState(defaultThemeColors.secondaryColor);
   const [accentColorInput, setAccentColorInput] = useState(defaultThemeColors.accentColor);
@@ -298,79 +265,11 @@ export default function App({ defaultThemeColors }: AppProps) {
     };
   }, [selectedFile]);
 
-  const countryOptions = useMemo(
-    () => Country.getAllCountries().map(mapCountryOption).sort(sortByName),
-    [],
-  );
-  const cityOptions = useMemo(() => {
-    if (!selectedCountry) {
-      return [];
-    }
-
-    const uniqueCities = new Map<string, LocationOption>();
-
-    for (const city of City.getCitiesOfCountry(selectedCountry.code) ?? []) {
-      const key = city.name.trim().toLowerCase();
-
-      if (!key || uniqueCities.has(key)) {
-        continue;
-      }
-
-      uniqueCities.set(key, mapCityOption(city));
-    }
-
-    return Array.from(uniqueCities.values()).sort(sortByName);
-  }, [selectedCountry]);
-  const editCityOptions = useMemo(() => {
-    if (!editCountry) {
-      return [];
-    }
-
-    const uniqueCities = new Map<string, LocationOption>();
-
-    for (const city of City.getCitiesOfCountry(editCountry.code) ?? []) {
-      const key = city.name.trim().toLowerCase();
-
-      if (!key || uniqueCities.has(key)) {
-        continue;
-      }
-
-      uniqueCities.set(key, mapCityOption(city));
-    }
-
-    return Array.from(uniqueCities.values()).sort(sortByName);
-  }, [editCountry]);
-
-  useEffect(() => {
-    if (selectedCity && !cityOptions.some((cityOption) => cityOption.name === selectedCity.name)) {
-      setSelectedCity(null);
-    }
-  }, [cityOptions, selectedCity]);
-
-  useEffect(() => {
-    if (!editCity) {
-      return;
-    }
-
-    const matchingCity = editCityOptions.find((cityOption) => cityOption.name === editCity.name);
-
-    if (!matchingCity) {
-      setEditCity(null);
-      return;
-    }
-
-    if (matchingCity.code !== editCity.code) {
-      setEditCity(matchingCity);
-    }
-  }, [editCity, editCityOptions]);
-
   const isFormValid = Boolean(
     selectedCategory.trim() !== "" &&
     title.trim() !== "" &&
       caption.trim() !== "" &&
-      selectedFile &&
-      selectedCountry?.name &&
-      selectedCity?.name,
+      selectedFile,
   );
   const helperText = useMemo(() => {
     if (selectedFile) {
@@ -395,43 +294,11 @@ export default function App({ defaultThemeColors }: AppProps) {
   const isEditFormValid = Boolean(
     editCategory.trim() !== "" &&
     editTitle.trim() !== "" &&
-      editCaption.trim() !== "" &&
-      editCountry?.name &&
-      editCity?.name,
+      editCaption.trim() !== "",
   );
   const isAuthenticated = authState?.isAuthenticated ?? false;
   const categoryOptions = useMemo(() => categories ?? [], [categories]);
-  const filteredImages = useMemo(() => {
-    if (!images) {
-      return [];
-    }
-
-    return images.filter((image) => {
-      const matchesCountry = !countryFilter || image.country === countryFilter;
-      const matchesCity = !cityFilter || image.city === cityFilter;
-
-      return matchesCountry && matchesCity;
-    });
-  }, [cityFilter, countryFilter, images]);
-  const countryFilterOptions = useMemo(
-    () =>
-      Array.from(new Set((images ?? []).map((image) => image.country).filter(Boolean))).sort((left, right) =>
-        left.localeCompare(right),
-      ),
-    [images],
-  );
-  const cityFilterOptions = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          (images ?? [])
-            .filter((image) => !countryFilter || image.country === countryFilter)
-            .map((image) => image.city)
-            .filter(Boolean),
-        ),
-      ).sort((left, right) => left.localeCompare(right)),
-    [countryFilter, images],
-  );
+  const filteredImages = useMemo(() => images ?? [], [images]);
   const categoryTabs = useMemo(
     () => [{ label: "All", value: "__all__" }, ...categoryOptions.map((category) => ({ label: category, value: category }))],
     [categoryOptions],
@@ -493,9 +360,6 @@ export default function App({ defaultThemeColors }: AppProps) {
     setSelectedCategory("");
     setTitle("");
     setCaption("");
-    setSelectedCountry(null);
-    setSelectedCity(null);
-    setStreetAddress("");
     setSelectedFile(null);
     setPreviewUrl(null);
     setIsDragActive(false);
@@ -535,9 +399,6 @@ export default function App({ defaultThemeColors }: AppProps) {
     setEditCategory("");
     setEditTitle("");
     setEditCaption("");
-    setEditCountry(null);
-    setEditCity(null);
-    setEditStreetAddress("");
     setEditErrorMessage("");
   };
 
@@ -557,17 +418,10 @@ export default function App({ defaultThemeColors }: AppProps) {
   };
 
   const handleEditOpen = (image: NonNullable<typeof images>[number]) => {
-    const matchingCountry =
-      countryOptions.find((countryOption) => countryOption.name === image.country) ??
-      (image.country ? { code: image.country, name: image.country } : null);
-
     setEditingImageId(image._id);
     setEditCategory(image.category ?? "");
     setEditTitle(image.title);
     setEditCaption(image.caption);
-    setEditCountry(matchingCountry);
-    setEditCity(image.city ? { code: image.city, name: image.city } : null);
-    setEditStreetAddress(image.streetAddress ?? "");
     setEditErrorMessage("");
   };
 
@@ -676,12 +530,6 @@ export default function App({ defaultThemeColors }: AppProps) {
     }
   };
 
-  useEffect(() => {
-    if (cityFilter && !cityFilterOptions.includes(cityFilter)) {
-      setCityFilter(null);
-    }
-  }, [cityFilter, cityFilterOptions]);
-
   const handleThemeColorChange = (key: keyof ThemeColors, value: string) => {
     const normalized = normalizeHexColor(value);
 
@@ -766,8 +614,8 @@ export default function App({ defaultThemeColors }: AppProps) {
       return;
     }
 
-    if (!title.trim() || !caption.trim() || !selectedCountry?.name || !selectedCity?.name) {
-      setErrorMessage("Please add a category, title, caption, country, and city.");
+    if (!title.trim() || !caption.trim()) {
+      setErrorMessage("Please add a category, title, and caption.");
       return;
     }
 
@@ -797,9 +645,6 @@ export default function App({ defaultThemeColors }: AppProps) {
         category: normalizeCategoryValue(selectedCategory),
         title,
         caption,
-        country: selectedCountry.name,
-        city: selectedCity.name,
-        streetAddress: streetAddress.trim() || undefined,
       });
 
       setIsDialogOpen(false);
@@ -824,8 +669,8 @@ export default function App({ defaultThemeColors }: AppProps) {
       return;
     }
 
-    if (!editCategory.trim() || !editTitle.trim() || !editCaption.trim() || !editCountry?.name || !editCity?.name) {
-      setEditErrorMessage("Please update the category, title, caption, country, and city.");
+    if (!editCategory.trim() || !editTitle.trim() || !editCaption.trim()) {
+      setEditErrorMessage("Please update the category, title, and caption.");
       return;
     }
 
@@ -840,9 +685,6 @@ export default function App({ defaultThemeColors }: AppProps) {
         category: normalizeCategoryValue(editCategory),
         title: editTitle,
         caption: editCaption,
-        country: editCountry.name,
-        city: editCity.name,
-        streetAddress: editStreetAddress.trim() || undefined,
       });
 
       setIsSavingEdit(false);
@@ -850,7 +692,6 @@ export default function App({ defaultThemeColors }: AppProps) {
       setEditCategory("");
       setEditTitle("");
       setEditCaption("");
-      setEditStreetAddress("");
       setEditErrorMessage("");
     } catch (error) {
       setEditErrorMessage(
@@ -967,7 +808,6 @@ export default function App({ defaultThemeColors }: AppProps) {
     api.gallery.listImageComments,
     activeImage ? { imageId: activeImage._id } : "skip",
   );
-  const isFilterOpen = Boolean(filterAnchorEl);
   const isCommentFormValid = Boolean(commentAuthorName.trim() && commentBody.trim());
   const activeBrandTab = currentRoute === "/ai" ? "ai" : currentRoute === "/art" ? "art" : false;
   const isArtPage = currentRoute === "/art";
@@ -1103,7 +943,6 @@ export default function App({ defaultThemeColors }: AppProps) {
     }
 
     setCurrentRoute(nextPath);
-    setFilterAnchorEl(null);
   };
 
   const openThemeDialog = () => {
@@ -1484,7 +1323,7 @@ export default function App({ defaultThemeColors }: AppProps) {
                 No images match this view yet.
               </Typography>
               <Typography color="text.secondary">
-                Try another category tab or adjust the location filters to see more artwork.
+                Try another category tab to see more artwork.
               </Typography>
             </Paper>
           ) : (
@@ -1507,8 +1346,6 @@ export default function App({ defaultThemeColors }: AppProps) {
                     value={selectedCategoryFilter ?? "__all__"}
                     onChange={(_, value: string) => {
                       setSelectedCategoryFilter(value === "__all__" ? null : value);
-                      setCountryFilter(null);
-                      setCityFilter(null);
                     }}
                     variant="scrollable"
                     scrollButtons="auto"
@@ -1536,17 +1373,6 @@ export default function App({ defaultThemeColors }: AppProps) {
                     ))}
                   </Tabs>
                 </Box>
-            <IconButton
-              aria-label="Filter images"
-              onClick={(event) => setFilterAnchorEl(event.currentTarget)}
-                  sx={{
-                    alignSelf: { xs: "flex-end", lg: "center" },
-                border: `1px solid ${alpha(theme.palette.primary.dark, 0.18)}`,
-                backgroundColor: alpha("#ffffff", 0.76),
-              }}
-            >
-              <FilterAltOutlinedIcon fontSize="small" />
-            </IconButton>
               </Stack>
               <Box
                 sx={{
@@ -1720,100 +1546,6 @@ export default function App({ defaultThemeColors }: AppProps) {
         </Stack>
         )}
       </Container>
-
-      <Popover
-        open={isFilterOpen}
-        anchorEl={filterAnchorEl}
-        onClose={() => setFilterAnchorEl(null)}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-        transformOrigin={{ vertical: "top", horizontal: "right" }}
-        slotProps={{
-          paper: {
-            sx: {
-              mt: 1,
-              p: 2.25,
-              width: { xs: "calc(100vw - 32px)", sm: 380 },
-              maxWidth: "calc(100vw - 32px)",
-              borderRadius: 0,
-              border: `1px solid ${alpha(theme.palette.primary.dark, 0.18)}`,
-              background: `linear-gradient(180deg, ${alpha("#ffffff", 0.97)}, ${alpha(lighten(currentThemeColors.secondaryColor, 0.84), 0.95)} 54%, ${alpha(lighten(currentThemeColors.accentColor, 0.86), 0.94)})`,
-              boxShadow: `0 20px 42px ${alpha(theme.palette.primary.dark, 0.12)}`,
-            },
-          },
-        }}
-      >
-        <Stack spacing={2}>
-          <Stack
-            direction="row"
-            spacing={1.5}
-            sx={{ alignItems: "center", justifyContent: "space-between" }}
-          >
-            <Box>
-              <Typography variant="h6">Filter Gallery</Typography>
-              <Typography variant="body2" color="text.secondary">
-                Choose a country or city.
-              </Typography>
-            </Box>
-            {(countryFilter || cityFilter) ? (
-              <Button
-                variant="text"
-                onClick={() => {
-                  setCountryFilter(null);
-                  setCityFilter(null);
-                }}
-              >
-                Clear
-              </Button>
-            ) : null}
-          </Stack>
-          <Stack spacing={1.25}>
-            <Typography variant="subtitle2" color="text.secondary">
-              Countries
-            </Typography>
-            <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: "wrap" }}>
-              {countryFilterOptions.map((country) => (
-                <Chip
-                  key={country}
-                  label={country}
-                  clickable
-                  color={countryFilter === country ? "primary" : "default"}
-                  variant={countryFilter === country ? "filled" : "outlined"}
-                  onClick={() => {
-                    setCountryFilter((currentCountry) =>
-                      currentCountry === country ? null : country,
-                    );
-                    setCityFilter(null);
-                  }}
-                />
-              ))}
-            </Stack>
-          </Stack>
-          <Stack spacing={1.25}>
-            <Typography variant="subtitle2" color="text.secondary">
-              Cities
-            </Typography>
-            <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: "wrap" }}>
-              {cityFilterOptions.map((city) => (
-                <Chip
-                  key={city}
-                  label={city}
-                  clickable
-                  color={cityFilter === city ? "primary" : "default"}
-                  variant={cityFilter === city ? "filled" : "outlined"}
-                  onClick={() => {
-                    setCityFilter((currentCity) => (currentCity === city ? null : city));
-                  }}
-                />
-              ))}
-              {cityFilterOptions.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  Pick a country to narrow the city list.
-                </Typography>
-              ) : null}
-            </Stack>
-          </Stack>
-        </Stack>
-      </Popover>
 
       <Dialog
         open={isAuthDialogOpen}
@@ -2394,7 +2126,7 @@ export default function App({ defaultThemeColors }: AppProps) {
         <DialogTitle sx={{ pb: 1 }}>
           <Typography variant="h4">Edit image details</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
-            Update the title, caption, and location for this gallery card.
+            Update the title, caption, and details for this gallery card.
           </Typography>
         </DialogTitle>
         <DialogContent>
@@ -2430,35 +2162,6 @@ export default function App({ defaultThemeColors }: AppProps) {
               minRows={4}
               fullWidth
               required
-            />
-            <Autocomplete
-              options={countryOptions}
-              value={editCountry}
-              isOptionEqualToValue={(option, value) => option.name === value.name}
-              getOptionLabel={(option) => option.name}
-              onChange={(_, value) => {
-                setEditCountry(value);
-                setEditCity(null);
-              }}
-              renderInput={(params) => (
-                <TextField {...params} label="Country" required />
-              )}
-            />
-            <Autocomplete
-              options={editCityOptions}
-              value={editCity}
-              disabled={!editCountry}
-              isOptionEqualToValue={(option, value) => option.name === value.name}
-              getOptionLabel={(option) => option.name}
-              onChange={(_, value) => setEditCity(value)}
-              renderInput={(params) => <TextField {...params} label="City" required />}
-            />
-            <TextField
-              label="Street Address"
-              value={editStreetAddress}
-              onChange={(event) => setEditStreetAddress(event.target.value)}
-              fullWidth
-              helperText="Optional"
             />
           </Stack>
         </DialogContent>
@@ -2512,7 +2215,7 @@ export default function App({ defaultThemeColors }: AppProps) {
         <DialogTitle sx={{ pb: 1 }}>
           <Typography variant="h4">Upload an image</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
-            Add a new frame to {activeSurfaceLabel} with its own title, caption, and location.
+            Add a new frame to {activeSurfaceLabel} with its own title, caption, and details.
           </Typography>
         </DialogTitle>
         <DialogContent>
@@ -2647,33 +2350,6 @@ export default function App({ defaultThemeColors }: AppProps) {
               minRows={4}
               fullWidth
               required
-            />
-            <Autocomplete
-              options={countryOptions}
-              value={selectedCountry}
-              isOptionEqualToValue={(option, value) => option.name === value.name}
-              getOptionLabel={(option) => option.name}
-              onChange={(_, value) => {
-                setSelectedCountry(value);
-                setSelectedCity(null);
-              }}
-              renderInput={(params) => <TextField {...params} label="Country" required />}
-            />
-            <Autocomplete
-              options={cityOptions}
-              value={selectedCity}
-              disabled={!selectedCountry}
-              isOptionEqualToValue={(option, value) => option.name === value.name}
-              getOptionLabel={(option) => option.name}
-              onChange={(_, value) => setSelectedCity(value)}
-              renderInput={(params) => <TextField {...params} label="City" required />}
-            />
-            <TextField
-              label="Street Address"
-              value={streetAddress}
-              onChange={(event) => setStreetAddress(event.target.value)}
-              fullWidth
-              helperText="Optional"
             />
           </Stack>
         </DialogContent>

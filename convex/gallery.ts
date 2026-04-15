@@ -170,8 +170,8 @@ export const createImageEntry = mutation({
     category: v.string(),
     title: v.string(),
     caption: v.string(),
-    country: v.string(),
-    city: v.string(),
+    country: v.optional(v.string()),
+    city: v.optional(v.string()),
     streetAddress: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -179,8 +179,8 @@ export const createImageEntry = mutation({
     const category = args.category.trim();
     const title = args.title.trim();
     const caption = args.caption.trim();
-    const country = args.country.trim();
-    const city = args.city.trim();
+    const country = args.country?.trim();
+    const city = args.city?.trim();
     const streetAddress = args.streetAddress?.trim();
 
     if (!category) {
@@ -195,14 +195,6 @@ export const createImageEntry = mutation({
       throw new Error("Caption is required.");
     }
 
-    if (!country) {
-      throw new Error("Country is required.");
-    }
-
-    if (!city) {
-      throw new Error("City is required.");
-    }
-
     const imageId = await ctx.db.insert("images", {
       storageId: args.storageId,
       surface: args.surface,
@@ -210,8 +202,8 @@ export const createImageEntry = mutation({
       title,
       caption,
       commentCount: 0,
-      country,
-      city,
+      country: country || undefined,
+      city: city || undefined,
       streetAddress: streetAddress || undefined,
     });
 
@@ -220,8 +212,8 @@ export const createImageEntry = mutation({
       surface: args.surface,
       title,
       category,
-      country,
-      city,
+      country: country || undefined,
+      city: city || undefined,
       streetAddress: streetAddress || undefined,
     });
 
@@ -237,8 +229,8 @@ export const updateImageEntry = mutation({
     category: v.string(),
     title: v.string(),
     caption: v.string(),
-    country: v.string(),
-    city: v.string(),
+    country: v.optional(v.string()),
+    city: v.optional(v.string()),
     streetAddress: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -252,8 +244,8 @@ export const updateImageEntry = mutation({
     const category = args.category.trim();
     const title = args.title.trim();
     const caption = args.caption.trim();
-    const country = args.country.trim();
-    const city = args.city.trim();
+    const country = args.country?.trim();
+    const city = args.city?.trim();
     const streetAddress = args.streetAddress?.trim();
 
     if (!category) {
@@ -268,21 +260,13 @@ export const updateImageEntry = mutation({
       throw new Error("Caption is required.");
     }
 
-    if (!country) {
-      throw new Error("Country is required.");
-    }
-
-    if (!city) {
-      throw new Error("City is required.");
-    }
-
     await ctx.db.patch("images", args.imageId, {
       surface: args.surface,
       category,
       title,
       caption,
-      country,
-      city,
+      country: country || undefined,
+      city: city || undefined,
       streetAddress: streetAddress || undefined,
     });
 
@@ -291,8 +275,8 @@ export const updateImageEntry = mutation({
       surface: args.surface,
       title,
       category,
-      country,
-      city,
+      country: country || undefined,
+      city: city || undefined,
       streetAddress: streetAddress || undefined,
     });
 
