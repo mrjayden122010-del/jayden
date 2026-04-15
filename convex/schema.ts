@@ -6,11 +6,24 @@ export default defineSchema({
     token: v.string(),
     expiresAt: v.number(),
   }).index("by_token", ["token"]),
+  imageComments: defineTable({
+    imageId: v.id("images"),
+    authorName: v.string(),
+    body: v.string(),
+  }).index("by_image_id", ["imageId"]),
+  imageReactions: defineTable({
+    imageId: v.id("images"),
+    visitorId: v.string(),
+    value: v.union(v.literal("like"), v.literal("dislike")),
+  })
+    .index("by_image_id", ["imageId"])
+    .index("by_image_id_and_visitor_id", ["imageId", "visitorId"]),
   images: defineTable({
     storageId: v.id("_storage"),
     category: v.optional(v.string()),
     title: v.string(),
     caption: v.string(),
+    commentCount: v.optional(v.number()),
     country: v.optional(v.string()),
     city: v.optional(v.string()),
     streetAddress: v.optional(v.string()),

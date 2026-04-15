@@ -1,14 +1,53 @@
 import { v } from "convex/values";
-import { mutation, query, type MutationCtx } from "./_generated/server";
+import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 
 const ADMIN_PASSWORD = "Jayden612";
 const SESSION_DURATION_MS = 1000 * 60 * 60 * 24 * 30;
 const THEME_SETTINGS_KEY = "theme";
 const HEX_COLOR_PATTERN = /^#([0-9a-fA-F]{6})$/;
+const MAX_COMMENT_AUTHOR_LENGTH = 60;
+const MAX_COMMENT_BODY_LENGTH = 500;
+const MAX_VISITOR_ID_LENGTH = 120;
 
 const normalizeHexColor = (value: string) => value.trim().toUpperCase();
 const now = () => Date.now();
+
+const countCommentsForImage = async (
+  ctx: QueryCtx | MutationCtx,
+  imageId: Id<"images">,
+) => {
+  let commentCount = 0;
+
+  for await (const _comment of ctx.db
+    .query("imageComments")
+    .withIndex("by_image_id", (q) => q.eq("imageId", imageId))) {
+    commentCount += 1;
+  }
+
+  return commentCount;
+};
+
+const getReactionSummaryForImage = async (
+  ctx: QueryCtx | MutationCtx,
+  imageId: Id<"images">,
+) => {
+  let likeCount = 0;
+  let dislikeCount = 0;
+
+  for await (const reaction of ctx.db
+    .query("imageReactions")
+    .withIndex("by_image_id", (q) => q.eq("imageId", imageId))) {
+    if (reaction.value === "like") {
+      likeCount += 1;
+    } else {
+      dislikeCount += 1;
+    }
+  }
+
+  return { likeCount, dislikeCount };
+};
 
 const getSession = async (ctx: MutationCtx, sessionToken: string) => {
   const token = sessionToken.trim();
@@ -166,6 +205,7 @@ export const createImageEntry = mutation({
       category,
       title,
       caption,
+      commentCount: 0,
       country,
       city,
       streetAddress: streetAddress || undefined,
@@ -249,9 +289,11 @@ export const updateImageEntry = mutation({
 export const listImages = query({
   args: {
     category: v.union(v.string(), v.null()),
+    visitorId: v.union(v.string(), v.null()),
   },
   handler: async (ctx, args) => {
     const category = args.category?.trim() ?? "";
+    const visitorId = args.visitorId?.trim() ?? "";
     const images = category
       ? await ctx.db
           .query("images")
@@ -261,18 +303,89 @@ export const listImages = query({
       : await ctx.db.query("images").order("desc").collect();
 
     return await Promise.all(
-      images.map(async (image) => ({
-        _id: image._id,
-        _creationTime: image._creationTime,
-        category: image.category ?? "",
-        title: image.title,
-        caption: image.caption,
-        country: image.country ?? "",
-        city: image.city ?? "",
-        streetAddress: image.streetAddress ?? "",
-        imageUrl: await ctx.storage.getUrl(image.storageId),
-      })),
+      images.map(async (image) => {
+        const commentCount = await countCommentsForImage(ctx, image._id);
+        const { likeCount, dislikeCount } = await getReactionSummaryForImage(ctx, image._id);
+        const viewerReaction = visitorId
+          ? await ctx.db
+              .query("imageReactions")
+              .withIndex("by_image_id_and_visitor_id", (q) =>
+                q.eq("imageId", image._id).eq("visitorId", visitorId),
+              )
+              .unique()
+          : null;
+
+        return {
+          _id: image._id,
+          _creationTime: image._creationTime,
+          category: image.category ?? "",
+          title: image.title,
+          caption: image.caption,
+          commentCount,
+          likeCount,
+          dislikeCount,
+          viewerReaction: viewerReaction?.value ?? null,
+          country: image.country ?? "",
+          city: image.city ?? "",
+          streetAddress: image.streetAddress ?? "",
+          imageUrl: await ctx.storage.getUrl(image.storageId),
+        };
+      }),
     );
+  },
+});
+
+export const setImageReaction = mutation({
+  args: {
+    imageId: v.id("images"),
+    visitorId: v.string(),
+    value: v.union(v.literal("like"), v.literal("dislike"), v.null()),
+  },
+  handler: async (ctx, args) => {
+    const image = await ctx.db.get(args.imageId);
+
+    if (!image) {
+      throw new Error("This photo no longer exists.");
+    }
+
+    const visitorId = args.visitorId.trim();
+
+    if (!visitorId) {
+      throw new Error("A visitor id is required.");
+    }
+
+    if (visitorId.length > MAX_VISITOR_ID_LENGTH) {
+      throw new Error("That visitor id is too long.");
+    }
+
+    const existingReaction = await ctx.db
+      .query("imageReactions")
+      .withIndex("by_image_id_and_visitor_id", (q) =>
+        q.eq("imageId", args.imageId).eq("visitorId", visitorId),
+      )
+      .unique();
+
+    if (args.value === null) {
+      if (existingReaction) {
+        await ctx.db.delete(existingReaction._id);
+      }
+
+      return { value: null };
+    }
+
+    if (existingReaction) {
+      await ctx.db.patch("imageReactions", existingReaction._id, {
+        value: args.value,
+      });
+    } else {
+      await ctx.db.insert("imageReactions", {
+        imageId: args.imageId,
+        visitorId,
+        value: args.value,
+      });
+    }
+
+    return { value: args.value };
   },
 });
 
@@ -287,6 +400,67 @@ export const listCategories = query({
           .filter((category) => category.length > 0),
       ),
     ).sort((left, right) => left.localeCompare(right));
+  },
+});
+
+export const listImageComments = query({
+  args: {
+    imageId: v.id("images"),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("imageComments")
+      .withIndex("by_image_id", (q) => q.eq("imageId", args.imageId))
+      .order("desc")
+      .take(100);
+  },
+});
+
+export const addImageComment = mutation({
+  args: {
+    imageId: v.id("images"),
+    authorName: v.string(),
+    body: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const image = await ctx.db.get(args.imageId);
+
+    if (!image) {
+      throw new Error("This photo no longer exists.");
+    }
+
+    const authorName = args.authorName.trim();
+    const body = args.body.trim();
+
+    if (!authorName) {
+      throw new Error("Please enter your name.");
+    }
+
+    if (authorName.length > MAX_COMMENT_AUTHOR_LENGTH) {
+      throw new Error(`Names must be ${MAX_COMMENT_AUTHOR_LENGTH} characters or fewer.`);
+    }
+
+    if (!body) {
+      throw new Error("Please enter a comment.");
+    }
+
+    if (body.length > MAX_COMMENT_BODY_LENGTH) {
+      throw new Error(`Comments must be ${MAX_COMMENT_BODY_LENGTH} characters or fewer.`);
+    }
+
+    const existingCommentCount = await countCommentsForImage(ctx, args.imageId);
+
+    const commentId = await ctx.db.insert("imageComments", {
+      imageId: args.imageId,
+      authorName,
+      body,
+    });
+
+    await ctx.db.patch("images", args.imageId, {
+      commentCount: existingCommentCount + 1,
+    });
+
+    return { commentId };
   },
 });
 

@@ -1,4 +1,4 @@
-import { ChangeEvent, ClipboardEvent, DragEvent, useEffect, useEffectEvent, useMemo, useState } from "react";
+import { ChangeEvent, ClipboardEvent, DragEvent, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import {
   Alert,
@@ -28,7 +28,7 @@ import {
   Typography,
 } from "@mui/material";
 import { alpha, darken, lighten, useTheme } from "@mui/material/styles";
-import { Filter, LogIn, LogOut } from "lucide-react";
+import { Filter, LogIn, LogOut, MessageCircleMore, ThumbsDown, ThumbsUp } from "lucide-react";
 import { City, Country, type ICity, type ICountry } from "country-state-city";
 import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
@@ -55,6 +55,7 @@ type LocationOption = {
 
 const HEX_COLOR_PATTERN = /^#([0-9A-F]{6})$/;
 const ADMIN_SESSION_STORAGE_KEY = "jayden-gallery-admin-session";
+const PUBLIC_VISITOR_ID_STORAGE_KEY = "jayden-gallery-public-visitor-id";
 
 const normalizeHexColor = (value: string) => value.trim().toUpperCase();
 const normalizeCategoryValue = (value: string) => value.trim();
@@ -105,7 +106,25 @@ const mapCityOption = (city: ICity): LocationOption => ({
 export default function App({ defaultThemeColors }: AppProps) {
   const theme = useTheme();
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string | null>(null);
-  const images = useQuery(api.gallery.listImages, { category: selectedCategoryFilter });
+  const [visitorId] = useState<string | null>(() => {
+    if (typeof window === "undefined") {
+      return null;
+    }
+
+    const existingVisitorId = window.localStorage.getItem(PUBLIC_VISITOR_ID_STORAGE_KEY);
+
+    if (existingVisitorId) {
+      return existingVisitorId;
+    }
+
+    const nextVisitorId = crypto.randomUUID();
+    window.localStorage.setItem(PUBLIC_VISITOR_ID_STORAGE_KEY, nextVisitorId);
+    return nextVisitorId;
+  });
+  const images = useQuery(api.gallery.listImages, {
+    category: selectedCategoryFilter,
+    visitorId,
+  });
   const categories = useQuery(api.gallery.listCategories);
   const [sessionToken, setSessionToken] = useState<string | null>(() => {
     if (typeof window === "undefined") {
@@ -121,6 +140,8 @@ export default function App({ defaultThemeColors }: AppProps) {
   const createImageEntry = useMutation(api.gallery.createImageEntry);
   const updateImageEntry = useMutation(api.gallery.updateImageEntry);
   const saveThemeSettings = useMutation(api.gallery.saveThemeSettings);
+  const addImageComment = useMutation(api.gallery.addImageComment);
+  const setImageReaction = useMutation(api.gallery.setImageReaction);
 
   const [isAuthDialogOpen, setIsAuthDialogOpen] = useState(false);
   const [password, setPassword] = useState("");
@@ -159,6 +180,14 @@ export default function App({ defaultThemeColors }: AppProps) {
   const [themeErrorMessage, setThemeErrorMessage] = useState("");
   const [isSavingTheme, setIsSavingTheme] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState<number | null>(null);
+  const [commentAuthorName, setCommentAuthorName] = useState("");
+  const [commentBody, setCommentBody] = useState("");
+  const [commentErrorMessage, setCommentErrorMessage] = useState("");
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [shouldScrollToComments, setShouldScrollToComments] = useState(false);
+  const [reactionErrorMessage, setReactionErrorMessage] = useState("");
+  const [pendingReactionImageId, setPendingReactionImageId] = useState<Id<"images"> | null>(null);
+  const commentsSectionRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!isThemeDialogOpen) {
@@ -461,8 +490,9 @@ export default function App({ defaultThemeColors }: AppProps) {
     setActiveImageIndex(null);
   };
 
-  const handleViewerOpen = (index: number) => {
+  const handleViewerOpen = (index: number, options?: { scrollToComments?: boolean }) => {
     setActiveImageIndex(index);
+    setShouldScrollToComments(Boolean(options?.scrollToComments));
   };
 
   const handleViewerStep = (direction: "previous" | "next") => {
@@ -845,7 +875,96 @@ export default function App({ defaultThemeColors }: AppProps) {
     activeImageIndex !== null && filteredImages[activeImageIndex]
       ? filteredImages[activeImageIndex]
       : null;
+  const activeImageComments = useQuery(
+    api.gallery.listImageComments,
+    activeImage ? { imageId: activeImage._id } : "skip",
+  );
   const isFilterOpen = Boolean(filterAnchorEl);
+  const isCommentFormValid = Boolean(commentAuthorName.trim() && commentBody.trim());
+
+  useEffect(() => {
+    setCommentAuthorName("");
+    setCommentBody("");
+    setCommentErrorMessage("");
+    setIsSubmittingComment(false);
+    setReactionErrorMessage("");
+  }, [activeImage?._id]);
+
+  useEffect(() => {
+    if (!activeImage || !shouldScrollToComments) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      commentsSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+      setShouldScrollToComments(false);
+    }, 120);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [activeImage, shouldScrollToComments]);
+
+  const handleCommentSubmit = async () => {
+    if (!activeImage) {
+      return;
+    }
+
+    if (!commentAuthorName.trim() || !commentBody.trim()) {
+      setCommentErrorMessage("Please add your name and a comment.");
+      return;
+    }
+
+    setIsSubmittingComment(true);
+    setCommentErrorMessage("");
+
+    try {
+      await addImageComment({
+        imageId: activeImage._id,
+        authorName: commentAuthorName,
+        body: commentBody,
+      });
+      setCommentAuthorName("");
+      setCommentBody("");
+    } catch (error) {
+      setCommentErrorMessage(
+        error instanceof Error ? error.message : "Unable to post your comment right now.",
+      );
+    } finally {
+      setIsSubmittingComment(false);
+    }
+  };
+
+  const handleReactionSubmit = async (
+    imageId: Id<"images">,
+    currentReaction: "like" | "dislike" | null,
+    nextReaction: "like" | "dislike",
+  ) => {
+    if (!visitorId) {
+      setReactionErrorMessage("Unable to save your reaction right now.");
+      return;
+    }
+
+    setPendingReactionImageId(imageId);
+    setReactionErrorMessage("");
+
+    try {
+      await setImageReaction({
+        imageId,
+        visitorId,
+        value: currentReaction === nextReaction ? null : nextReaction,
+      });
+    } catch (error) {
+      setReactionErrorMessage(
+        error instanceof Error ? error.message : "Unable to save your reaction right now.",
+      );
+    } finally {
+      setPendingReactionImageId(null);
+    }
+  };
 
   return (
     <Box
@@ -1221,23 +1340,73 @@ export default function App({ defaultThemeColors }: AppProps) {
                         </Stack>
                       </CardContent>
                     </CardActionArea>
-                    {isAuthenticated ? (
-                      <Box sx={{ px: 2, pb: 2 }}>
-                        <Button
+                    <Stack spacing={1.25} sx={{ px: 2, pb: 2 }}>
+                      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: "wrap" }}>
+                        <Chip
+                          icon={<MessageCircleMore size={16} />}
+                          label={`${image.commentCount} ${image.commentCount === 1 ? "comment" : "comments"}`}
                           variant="outlined"
                           color="primary"
-                          onClick={() => handleEditOpen(image)}
-                          sx={{
-                            px: 2.2,
-                            py: 0.9,
-                            borderWidth: 1.5,
-                            backgroundColor: alpha("#ffffff", 0.46),
-                          }}
-                        >
-                          Edit
-                        </Button>
-                      </Box>
-                    ) : null}
+                          clickable={!isAuthenticated}
+                          onClick={
+                            !isAuthenticated
+                              ? () => handleViewerOpen(index, { scrollToComments: true })
+                              : undefined
+                          }
+                          disabled={isAuthenticated}
+                          sx={{ backgroundColor: alpha("#ffffff", 0.48) }}
+                        />
+                        <Chip
+                          icon={<ThumbsUp size={16} />}
+                          label={image.likeCount}
+                          variant={image.viewerReaction === "like" ? "filled" : "outlined"}
+                          color="primary"
+                          clickable={!isAuthenticated}
+                          onClick={
+                            !isAuthenticated
+                              ? () => {
+                                  void handleReactionSubmit(image._id, image.viewerReaction, "like");
+                                }
+                              : undefined
+                          }
+                          disabled={isAuthenticated || pendingReactionImageId === image._id}
+                          sx={{ backgroundColor: alpha("#ffffff", 0.48) }}
+                        />
+                        <Chip
+                          icon={<ThumbsDown size={16} />}
+                          label={image.dislikeCount}
+                          variant={image.viewerReaction === "dislike" ? "filled" : "outlined"}
+                          color="primary"
+                          clickable={!isAuthenticated}
+                          onClick={
+                            !isAuthenticated
+                              ? () => {
+                                  void handleReactionSubmit(image._id, image.viewerReaction, "dislike");
+                                }
+                              : undefined
+                          }
+                          disabled={isAuthenticated || pendingReactionImageId === image._id}
+                          sx={{ backgroundColor: alpha("#ffffff", 0.48) }}
+                        />
+                      </Stack>
+                      {isAuthenticated ? (
+                        <Box>
+                          <Button
+                            variant="outlined"
+                            color="primary"
+                            onClick={() => handleEditOpen(image)}
+                            sx={{
+                              minHeight: 44,
+                              px: 1.25,
+                              borderWidth: 1.5,
+                              backgroundColor: alpha("#ffffff", 0.46),
+                            }}
+                          >
+                            Edit
+                          </Button>
+                        </Box>
+                      ) : null}
+                    </Stack>
                   </Card>
                 ))}
               </Box>
@@ -1506,6 +1675,143 @@ export default function App({ defaultThemeColors }: AppProps) {
                     }).format(new Date(activeImage._creationTime))}
                   </Typography>
                 </Stack>
+                <Paper
+                  ref={commentsSectionRef}
+                  elevation={0}
+                  sx={{
+                    p: { xs: 2, md: 2.5 },
+                    border: `1px solid ${alpha(theme.palette.primary.dark, 0.14)}`,
+                    backgroundColor: alpha("#ffffff", 0.76),
+                  }}
+                >
+                  <Stack spacing={2}>
+                    <Box>
+                      <Typography variant="h6">Public comments</Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
+                        Visitors can leave a short note on each photo.
+                      </Typography>
+                    </Box>
+                    {reactionErrorMessage ? <Alert severity="error">{reactionErrorMessage}</Alert> : null}
+                    {!isAuthenticated ? (
+                      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: "wrap" }}>
+                        <Button
+                          variant={activeImage.viewerReaction === "like" ? "contained" : "outlined"}
+                          color="primary"
+                          disabled={pendingReactionImageId === activeImage._id}
+                          onClick={() => {
+                            void handleReactionSubmit(
+                              activeImage._id,
+                              activeImage.viewerReaction,
+                              "like",
+                            );
+                          }}
+                        >
+                          Like ({activeImage.likeCount})
+                        </Button>
+                        <Button
+                          variant={activeImage.viewerReaction === "dislike" ? "contained" : "outlined"}
+                          color="primary"
+                          disabled={pendingReactionImageId === activeImage._id}
+                          onClick={() => {
+                            void handleReactionSubmit(
+                              activeImage._id,
+                              activeImage.viewerReaction,
+                              "dislike",
+                            );
+                          }}
+                        >
+                          Dislike ({activeImage.dislikeCount})
+                        </Button>
+                      </Stack>
+                    ) : null}
+                    {!isAuthenticated ? (
+                      <>
+                        {commentErrorMessage ? <Alert severity="error">{commentErrorMessage}</Alert> : null}
+                        <Stack spacing={1.5}>
+                          <TextField
+                            label="Your name"
+                            value={commentAuthorName}
+                            onChange={(event) => {
+                              setCommentAuthorName(event.target.value);
+                              setCommentErrorMessage("");
+                            }}
+                            fullWidth
+                          />
+                          <TextField
+                            label="Your comment"
+                            value={commentBody}
+                            onChange={(event) => {
+                              setCommentBody(event.target.value);
+                              setCommentErrorMessage("");
+                            }}
+                            multiline
+                            minRows={3}
+                            fullWidth
+                          />
+                          <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+                            <Button
+                              variant="contained"
+                              disabled={!isCommentFormValid || isSubmittingComment}
+                              onClick={() => {
+                                void handleCommentSubmit();
+                              }}
+                            >
+                              {isSubmittingComment ? "Posting..." : "Post Comment"}
+                            </Button>
+                          </Box>
+                        </Stack>
+                      </>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        Comment writing is hidden while you are logged in as admin.
+                      </Typography>
+                    )}
+                    <Stack spacing={1.5}>
+                      {activeImageComments === undefined ? (
+                        <Box sx={{ display: "flex", justifyContent: "center", py: 2 }}>
+                          <CircularProgress size={24} />
+                        </Box>
+                      ) : activeImageComments.length ? (
+                        activeImageComments.map((comment) => (
+                          <Paper
+                            key={comment._id}
+                            elevation={0}
+                            sx={{
+                              p: 1.75,
+                              border: `1px solid ${alpha(theme.palette.primary.dark, 0.1)}`,
+                              backgroundColor: alpha(lighten(currentThemeColors.secondaryColor, 0.9), 0.35),
+                            }}
+                          >
+                            <Stack spacing={0.75}>
+                              <Stack
+                                direction={{ xs: "column", sm: "row" }}
+                                spacing={1}
+                                sx={{ justifyContent: "space-between" }}
+                              >
+                                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                                  {comment.authorName}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {new Intl.DateTimeFormat("en-US", {
+                                    dateStyle: "medium",
+                                    timeStyle: "short",
+                                  }).format(new Date(comment._creationTime))}
+                                </Typography>
+                              </Stack>
+                              <Typography variant="body2" color="text.secondary">
+                                {comment.body}
+                              </Typography>
+                            </Stack>
+                          </Paper>
+                        ))
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">
+                          No comments yet. Be the first to leave one.
+                        </Typography>
+                      )}
+                    </Stack>
+                  </Stack>
+                </Paper>
               </Stack>
             </DialogContent>
             <DialogActions
