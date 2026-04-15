@@ -1,5 +1,5 @@
 import { ChangeEvent, ClipboardEvent, DragEvent, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import {
   Alert,
   Autocomplete,
@@ -28,6 +28,7 @@ import {
   Typography,
 } from "@mui/material";
 import { alpha, darken, lighten, useTheme } from "@mui/material/styles";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import { Filter, LogIn, LogOut, MessageCircleMore, ThumbsDown, ThumbsUp } from "lucide-react";
 import { City, Country, type ICity, type ICountry } from "country-state-city";
 import { api } from "../convex/_generated/api";
@@ -105,6 +106,8 @@ const mapCityOption = (city: ICity): LocationOption => ({
 
 export default function App({ defaultThemeColors }: AppProps) {
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const pageSize = isMobile ? 3 : 6;
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string | null>(null);
   const [visitorId] = useState<string | null>(() => {
     if (typeof window === "undefined") {
@@ -121,9 +124,15 @@ export default function App({ defaultThemeColors }: AppProps) {
     window.localStorage.setItem(PUBLIC_VISITOR_ID_STORAGE_KEY, nextVisitorId);
     return nextVisitorId;
   });
-  const images = useQuery(api.gallery.listImages, {
+  const {
+    results: images,
+    status: imagesStatus,
+    loadMore: loadMoreImages,
+  } = usePaginatedQuery(api.gallery.listImagesPaginated, {
     category: selectedCategoryFilter,
     visitorId,
+  }, {
+    initialNumItems: pageSize,
   });
   const categories = useQuery(api.gallery.listCategories);
   const [sessionToken, setSessionToken] = useState<string | null>(() => {
@@ -142,6 +151,7 @@ export default function App({ defaultThemeColors }: AppProps) {
   const saveThemeSettings = useMutation(api.gallery.saveThemeSettings);
   const addImageComment = useMutation(api.gallery.addImageComment);
   const setImageReaction = useMutation(api.gallery.setImageReaction);
+  const notifyImageInteraction = useMutation(api.gallery.notifyImageInteraction);
 
   const [isAuthDialogOpen, setIsAuthDialogOpen] = useState(false);
   const [password, setPassword] = useState("");
@@ -188,6 +198,7 @@ export default function App({ defaultThemeColors }: AppProps) {
   const [reactionErrorMessage, setReactionErrorMessage] = useState("");
   const [pendingReactionImageId, setPendingReactionImageId] = useState<Id<"images"> | null>(null);
   const commentsSectionRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreTriggerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!isThemeDialogOpen) {
@@ -891,6 +902,35 @@ export default function App({ defaultThemeColors }: AppProps) {
   }, [activeImage?._id]);
 
   useEffect(() => {
+    const loadMoreTarget = loadMoreTriggerRef.current;
+
+    if (!loadMoreTarget || imagesStatus !== "CanLoadMore") {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+
+        if (!entry?.isIntersecting) {
+          return;
+        }
+
+        loadMoreImages(pageSize);
+      },
+      {
+        rootMargin: "240px 0px",
+      },
+    );
+
+    observer.observe(loadMoreTarget);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [imagesStatus, loadMoreImages, pageSize, filteredImages.length]);
+
+  useEffect(() => {
     if (!activeImage || !shouldScrollToComments) {
       return;
     }
@@ -935,6 +975,17 @@ export default function App({ defaultThemeColors }: AppProps) {
       );
     } finally {
       setIsSubmittingComment(false);
+    }
+  };
+
+  const handleCommentOpen = async (imageId: Id<"images">) => {
+    try {
+      await notifyImageInteraction({
+        imageId,
+        interaction: "comment_opened",
+      });
+    } catch {
+      // Ignore notification failures so opening comments still works.
     }
   };
 
@@ -1141,7 +1192,7 @@ export default function App({ defaultThemeColors }: AppProps) {
             </Stack>
           </Paper>
 
-          {images === undefined ? (
+          {imagesStatus === "LoadingFirstPage" ? (
             <Stack spacing={2} sx={{ py: 10, alignItems: "center" }}>
               <CircularProgress color="primary" />
               <Typography color="text.secondary">Loading your gallery...</Typography>
@@ -1350,7 +1401,10 @@ export default function App({ defaultThemeColors }: AppProps) {
                           clickable={!isAuthenticated}
                           onClick={
                             !isAuthenticated
-                              ? () => handleViewerOpen(index, { scrollToComments: true })
+                              ? () => {
+                                  handleViewerOpen(index, { scrollToComments: true });
+                                  void handleCommentOpen(image._id);
+                                }
                               : undefined
                           }
                           disabled={isAuthenticated}
@@ -1409,6 +1463,9 @@ export default function App({ defaultThemeColors }: AppProps) {
                     </Stack>
                   </Card>
                 ))}
+              </Box>
+              <Box ref={loadMoreTriggerRef} sx={{ display: "flex", justifyContent: "center", py: 1 }}>
+                {imagesStatus === "LoadingMore" ? <CircularProgress size={28} /> : null}
               </Box>
             </Stack>
           )}

@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
+import { paginationOptsValidator } from "convex/server";
 
 const ADMIN_PASSWORD = "Jayden612";
 const SESSION_DURATION_MS = 1000 * 60 * 60 * 24 * 30;
@@ -335,6 +336,59 @@ export const listImages = query({
   },
 });
 
+export const listImagesPaginated = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+    category: v.union(v.string(), v.null()),
+    visitorId: v.union(v.string(), v.null()),
+  },
+  handler: async (ctx, args) => {
+    const category = args.category?.trim() ?? "";
+    const visitorId = args.visitorId?.trim() ?? "";
+    const result = category
+      ? await ctx.db
+          .query("images")
+          .withIndex("by_category", (q) => q.eq("category", category))
+          .order("desc")
+          .paginate(args.paginationOpts)
+      : await ctx.db.query("images").order("desc").paginate(args.paginationOpts);
+
+    return {
+      ...result,
+      page: await Promise.all(
+        result.page.map(async (image) => {
+          const commentCount = await countCommentsForImage(ctx, image._id);
+          const { likeCount, dislikeCount } = await getReactionSummaryForImage(ctx, image._id);
+          const viewerReaction = visitorId
+            ? await ctx.db
+                .query("imageReactions")
+                .withIndex("by_image_id_and_visitor_id", (q) =>
+                  q.eq("imageId", image._id).eq("visitorId", visitorId),
+                )
+                .unique()
+            : null;
+
+          return {
+            _id: image._id,
+            _creationTime: image._creationTime,
+            category: image.category ?? "",
+            title: image.title,
+            caption: image.caption,
+            commentCount,
+            likeCount,
+            dislikeCount,
+            viewerReaction: viewerReaction?.value ?? null,
+            country: image.country ?? "",
+            city: image.city ?? "",
+            streetAddress: image.streetAddress ?? "",
+            imageUrl: await ctx.storage.getUrl(image.storageId),
+          };
+        }),
+      ),
+    };
+  },
+});
+
 export const setImageReaction = mutation({
   args: {
     imageId: v.id("images"),
@@ -385,7 +439,41 @@ export const setImageReaction = mutation({
       });
     }
 
+    await ctx.scheduler.runAfter(0, internal.lineNotifications.sendGroupMessage, {
+      event: args.value === "like" ? "liked" : "disliked",
+      title: image.title,
+      category: image.category ?? undefined,
+      country: image.country ?? undefined,
+      city: image.city ?? undefined,
+      streetAddress: image.streetAddress ?? undefined,
+    });
+
     return { value: args.value };
+  },
+});
+
+export const notifyImageInteraction = mutation({
+  args: {
+    imageId: v.id("images"),
+    interaction: v.literal("comment_opened"),
+  },
+  handler: async (ctx, args) => {
+    const image = await ctx.db.get(args.imageId);
+
+    if (!image) {
+      throw new Error("This photo no longer exists.");
+    }
+
+    await ctx.scheduler.runAfter(0, internal.lineNotifications.sendGroupMessage, {
+      event: args.interaction,
+      title: image.title,
+      category: image.category ?? undefined,
+      country: image.country ?? undefined,
+      city: image.city ?? undefined,
+      streetAddress: image.streetAddress ?? undefined,
+    });
+
+    return { notified: true };
   },
 });
 

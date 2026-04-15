@@ -10,7 +10,14 @@ const formatLocation = (parts: Array<string | undefined>) =>
 
 export const sendGroupMessage = internalAction({
   args: {
-    event: v.union(v.literal("created"), v.literal("updated"), v.literal("theme_changed")),
+    event: v.union(
+      v.literal("created"),
+      v.literal("updated"),
+      v.literal("theme_changed"),
+      v.literal("comment_opened"),
+      v.literal("liked"),
+      v.literal("disliked"),
+    ),
     title: v.optional(v.string()),
     category: v.optional(v.string()),
     country: v.optional(v.string()),
@@ -29,10 +36,20 @@ export const sendGroupMessage = internalAction({
       return { sent: false, reason: "missing_config" as const };
     }
 
+    const location = formatLocation([args.streetAddress, args.city, args.country]);
+    const title = args.title?.trim() || "Untitled image";
+    const category = args.category?.trim() || "Uncategorized";
+
     const text =
       args.event === "theme_changed"
         ? `Jayden changed gallery colors: ${[args.brandColor, args.secondaryColor, args.accentColor, args.textColor].filter(Boolean).join(", ")}`
-        : `Jayden ${args.event === "created" ? "added" : "updated"}: ${args.title} | ${args.category} | ${formatLocation([args.streetAddress, args.city, args.country])}`;
+        : args.event === "comment_opened"
+          ? `Someone opened comments for: ${title} | ${category} | ${location}`
+          : args.event === "liked"
+            ? `Someone liked: ${title} | ${category} | ${location}`
+            : args.event === "disliked"
+              ? `Someone disliked: ${title} | ${category} | ${location}`
+              : `Jayden ${args.event === "created" ? "added" : "updated"}: ${title} | ${category} | ${location}`;
 
     const response = await fetch(LINE_PUSH_ENDPOINT, {
       method: "POST",
