@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { CssBaseline } from "@mui/material";
 import {
@@ -197,9 +197,35 @@ const buildTheme = (themeColors: ThemeColors) => {
 };
 
 export default function ThemeShell() {
-  const savedThemeSettings = useQuery(api.gallery.getThemeSettings);
+  const [surface, setSurface] = useState<"ai" | "art">(() => {
+    if (typeof window === "undefined") {
+      return "ai";
+    }
+
+    return window.location.pathname === "/art" ? "art" : "ai";
+  });
+  const savedThemeSettings = useQuery(api.gallery.getThemeSettings, { surface });
   const savedThemeColors = resolveThemeColors(savedThemeSettings);
   const theme = useMemo(() => buildTheme(savedThemeColors), [savedThemeColors]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const syncSurface = () => {
+      setSurface(window.location.pathname === "/art" ? "art" : "ai");
+    };
+
+    syncSurface();
+    window.addEventListener("popstate", syncSurface);
+    window.addEventListener("jayden-route-change", syncSurface);
+
+    return () => {
+      window.removeEventListener("popstate", syncSurface);
+      window.removeEventListener("jayden-route-change", syncSurface);
+    };
+  }, []);
 
   return (
     <ThemeProvider theme={theme}>

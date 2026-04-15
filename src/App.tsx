@@ -58,6 +58,7 @@ type LocationOption = {
 };
 
 type AppRoute = "/" | "/ai" | "/art";
+type AppSurface = "ai" | "art";
 
 const HEX_COLOR_PATTERN = /^#([0-9A-F]{6})$/;
 const ADMIN_SESSION_STORAGE_KEY = "jayden-gallery-admin-session";
@@ -176,6 +177,7 @@ export default function App({ defaultThemeColors }: AppProps) {
 
     return normalizeAppPath(window.location.pathname);
   });
+  const activeSurface: AppSurface = currentRoute === "/art" ? "art" : "ai";
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string | null>(null);
   const [visitorId] = useState<string | null>(() => {
     if (typeof window === "undefined") {
@@ -197,12 +199,15 @@ export default function App({ defaultThemeColors }: AppProps) {
     status: imagesStatus,
     loadMore: loadMoreImages,
   } = usePaginatedQuery(api.gallery.listImagesPaginated, {
+    surface: activeSurface,
     category: selectedCategoryFilter,
     visitorId,
   }, {
     initialNumItems: pageSize,
   });
-  const categories = useQuery(api.gallery.listCategories);
+  const categories = useQuery(api.gallery.listCategories, {
+    surface: activeSurface,
+  });
   const [sessionToken, setSessionToken] = useState<string | null>(() => {
     if (typeof window === "undefined") {
       return null;
@@ -730,6 +735,7 @@ export default function App({ defaultThemeColors }: AppProps) {
     try {
       await saveThemeSettings({
         sessionToken: activeSessionToken,
+        surface: activeSurface,
         brandColor: normalizedBrandColor,
         secondaryColor: normalizedSecondaryColor,
         accentColor: normalizedAccentColor,
@@ -786,6 +792,7 @@ export default function App({ defaultThemeColors }: AppProps) {
 
       await createImageEntry({
         sessionToken: activeSessionToken,
+        surface: activeSurface,
         storageId,
         category: normalizeCategoryValue(selectedCategory),
         title,
@@ -828,6 +835,7 @@ export default function App({ defaultThemeColors }: AppProps) {
     try {
       await updateImageEntry({
         sessionToken: activeSessionToken,
+        surface: activeSurface,
         imageId: editingImageId,
         category: normalizeCategoryValue(editCategory),
         title: editTitle,
@@ -962,9 +970,10 @@ export default function App({ defaultThemeColors }: AppProps) {
   const isFilterOpen = Boolean(filterAnchorEl);
   const isCommentFormValid = Boolean(commentAuthorName.trim() && commentBody.trim());
   const activeBrandTab = currentRoute === "/ai" ? "ai" : currentRoute === "/art" ? "art" : false;
-  const isAiPage = currentRoute === "/ai";
   const isArtPage = currentRoute === "/art";
   const isHomePage = currentRoute === "/";
+  const activeSurfaceLabel = isArtPage ? "Jayden's Art" : "Jayden's AI";
+  const activeSurfaceShortLabel = isArtPage ? "Jayden Art" : "Jayden AI";
   const isProfileMenuOpen = Boolean(profileMenuAnchorEl);
 
   useEffect(() => {
@@ -1072,6 +1081,7 @@ export default function App({ defaultThemeColors }: AppProps) {
     try {
       await notifyImageInteraction({
         imageId,
+        surface: activeSurface,
         interaction: "comment_opened",
       });
     } catch {
@@ -1089,6 +1099,7 @@ export default function App({ defaultThemeColors }: AppProps) {
 
     if (normalizeAppPath(window.location.pathname) !== nextPath) {
       window.history.pushState({}, "", nextPath);
+      window.dispatchEvent(new Event("jayden-route-change"));
     }
 
     setCurrentRoute(nextPath);
@@ -1120,6 +1131,7 @@ export default function App({ defaultThemeColors }: AppProps) {
     try {
       await setImageReaction({
         imageId,
+        surface: activeSurface,
         visitorId,
         value: currentReaction === nextReaction ? null : nextReaction,
       });
@@ -1157,14 +1169,15 @@ export default function App({ defaultThemeColors }: AppProps) {
     >
       <Stack spacing={2.5} sx={{ position: "relative", zIndex: 1, alignItems: "center", textAlign: "center" }}>
         <Typography variant="overline" sx={{ color: "primary.dark", letterSpacing: "0.24em", fontWeight: 800 }}>
-          Jayden&apos;s Art World
+          {isArtPage ? "Jayden Art Gallery" : "Jayden AI Gallery"}
         </Typography>
         <Typography variant="h2" sx={{ fontSize: { xs: "2.8rem", md: "4.6rem" }, maxWidth: 920 }}>
-          Jayden&apos;s AI
+          {activeSurfaceLabel}
         </Typography>
         <Typography variant="h6" color="text.secondary" sx={{ maxWidth: 760, lineHeight: 1.65 }}>
-          This gallery is a collection of Jayden&apos;s artwork made with AI, brought together in one dreamy archive.
-          Every image holds a different mood, idea, and little piece of the world Jayden is building.
+          {isArtPage
+            ? "Jayden's Art has its own dedicated archive with separate uploads, categories, comments, likes, dislikes, and filters."
+            : "Jayden's AI has its own dedicated archive with separate uploads, categories, comments, likes, dislikes, and filters."}
         </Typography>
       </Stack>
     </Paper>
@@ -1204,7 +1217,7 @@ export default function App({ defaultThemeColors }: AppProps) {
           },
           {
             title: "Jayden's Art",
-            description: "Open the art section for Jayden's non-AI world and any future curated work.",
+            description: "Open the dedicated art archive with its own uploads, categories, comments, likes, dislikes, and filters.",
             path: "/art" as const,
           },
         ].map((destination) => (
@@ -1235,34 +1248,6 @@ export default function App({ defaultThemeColors }: AppProps) {
         ))}
       </Box>
     </Stack>
-  );
-
-  const artPage = (
-    <Paper
-      elevation={0}
-      sx={{
-        p: { xs: 3.5, md: 6 },
-        border: `1px solid ${alpha(theme.palette.primary.dark, 0.18)}`,
-        background: `linear-gradient(145deg, ${alpha("#ffffff", 0.82)}, ${alpha(theme.palette.info.light, 0.14)})`,
-        boxShadow: `0 24px 60px ${alpha(theme.palette.primary.dark, 0.12)}, inset 0 0 0 1px ${alpha("#ffffff", 0.58)}`,
-      }}
-    >
-      <Stack spacing={2.5} sx={{ alignItems: "center", textAlign: "center" }}>
-        <Typography variant="overline" sx={{ color: "primary.dark", letterSpacing: "0.22em", fontWeight: 800 }}>
-          Jayden&apos;s Art
-        </Typography>
-        <Typography variant="h2" sx={{ fontSize: { xs: "2.6rem", md: "4.2rem" } }}>
-          Jayden&apos;s Art
-        </Typography>
-        <Typography variant="h6" color="text.secondary" sx={{ maxWidth: 760, lineHeight: 1.65 }}>
-          This page is ready for Jayden&apos;s art section. We can fill it with a dedicated gallery, writing, or a
-          separate collection next.
-        </Typography>
-        <Button variant="contained" onClick={() => navigateTo("/ai")}>
-          Go To Jayden&apos;s AI
-        </Button>
-      </Stack>
-    </Paper>
   );
 
   return (
@@ -1427,7 +1412,7 @@ export default function App({ defaultThemeColors }: AppProps) {
             Theme Colors
           </MenuItem>
         ) : null}
-        {isAuthenticated && isAiPage ? (
+        {isAuthenticated && !isHomePage ? (
           <MenuItem
             onClick={() => {
               setProfileMenuAnchorEl(null);
@@ -1451,8 +1436,6 @@ export default function App({ defaultThemeColors }: AppProps) {
       <Container maxWidth="lg" sx={{ py: { xs: 6, md: 8 } }}>
         {isHomePage ? (
           landingPage
-        ) : isArtPage ? (
-          artPage
         ) : (
         <Stack spacing={4}>
           {heroPanel}
@@ -1480,7 +1463,7 @@ export default function App({ defaultThemeColors }: AppProps) {
               </Typography>
               <Typography color="text.secondary">
                 {isAuthenticated
-                  ? "Use the profile menu in the top right to add the first image with a title and caption."
+                  ? `Use the profile menu in the top right to add the first image to ${activeSurfaceShortLabel}.`
                   : "Use the login button in the top right to unlock uploads, edits, and theme controls."}
               </Typography>
             </Paper>
@@ -2529,7 +2512,7 @@ export default function App({ defaultThemeColors }: AppProps) {
         <DialogTitle sx={{ pb: 1 }}>
           <Typography variant="h4">Upload an image</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
-            Add a new frame to the gallery with a title, a short caption, and a location.
+            Add a new frame to {activeSurfaceLabel} with its own title, caption, and location.
           </Typography>
         </DialogTitle>
         <DialogContent>
@@ -2705,7 +2688,7 @@ export default function App({ defaultThemeColors }: AppProps) {
               void handleSubmit();
             }}
           >
-            {isSubmitting ? "Uploading..." : "Publish to Gallery"}
+            {isSubmitting ? "Uploading..." : `Publish from ${activeSurfaceShortLabel}`}
           </Button>
         </DialogActions>
       </Dialog>

@@ -164,6 +164,7 @@ export const generateUploadUrl = mutation({
 export const createImageEntry = mutation({
   args: {
     sessionToken: v.string(),
+    surface: v.union(v.literal("ai"), v.literal("art")),
     storageId: v.id("_storage"),
     category: v.string(),
     title: v.string(),
@@ -203,6 +204,7 @@ export const createImageEntry = mutation({
 
     const imageId = await ctx.db.insert("images", {
       storageId: args.storageId,
+      surface: args.surface,
       category,
       title,
       caption,
@@ -214,6 +216,7 @@ export const createImageEntry = mutation({
 
     await ctx.scheduler.runAfter(0, internal.lineNotifications.sendGroupMessage, {
       event: "created",
+      surface: args.surface,
       title,
       category,
       country,
@@ -228,6 +231,7 @@ export const createImageEntry = mutation({
 export const updateImageEntry = mutation({
   args: {
     sessionToken: v.string(),
+    surface: v.union(v.literal("ai"), v.literal("art")),
     imageId: v.id("images"),
     category: v.string(),
     title: v.string(),
@@ -238,6 +242,12 @@ export const updateImageEntry = mutation({
   },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);
+    const existingImage = await ctx.db.get(args.imageId);
+
+    if (!existingImage) {
+      throw new Error("This photo no longer exists.");
+    }
+
     const category = args.category.trim();
     const title = args.title.trim();
     const caption = args.caption.trim();
@@ -266,6 +276,7 @@ export const updateImageEntry = mutation({
     }
 
     await ctx.db.patch("images", args.imageId, {
+      surface: args.surface,
       category,
       title,
       caption,
@@ -276,6 +287,7 @@ export const updateImageEntry = mutation({
 
     await ctx.scheduler.runAfter(0, internal.lineNotifications.sendGroupMessage, {
       event: "updated",
+      surface: args.surface,
       title,
       category,
       country,
@@ -289,6 +301,7 @@ export const updateImageEntry = mutation({
 
 export const listImages = query({
   args: {
+    surface: v.union(v.literal("ai"), v.literal("art")),
     category: v.union(v.string(), v.null()),
     visitorId: v.union(v.string(), v.null()),
   },
@@ -298,10 +311,16 @@ export const listImages = query({
     const images = category
       ? await ctx.db
           .query("images")
-          .withIndex("by_category", (q) => q.eq("category", category))
+          .withIndex("by_surface_and_category", (q) =>
+            q.eq("surface", args.surface).eq("category", category),
+          )
           .order("desc")
           .collect()
-      : await ctx.db.query("images").order("desc").collect();
+      : await ctx.db
+          .query("images")
+          .withIndex("by_surface", (q) => q.eq("surface", args.surface))
+          .order("desc")
+          .collect();
 
     return await Promise.all(
       images.map(async (image) => {
@@ -339,6 +358,7 @@ export const listImages = query({
 export const listImagesPaginated = query({
   args: {
     paginationOpts: paginationOptsValidator,
+    surface: v.union(v.literal("ai"), v.literal("art")),
     category: v.union(v.string(), v.null()),
     visitorId: v.union(v.string(), v.null()),
   },
@@ -348,10 +368,16 @@ export const listImagesPaginated = query({
     const result = category
       ? await ctx.db
           .query("images")
-          .withIndex("by_category", (q) => q.eq("category", category))
+          .withIndex("by_surface_and_category", (q) =>
+            q.eq("surface", args.surface).eq("category", category),
+          )
           .order("desc")
           .paginate(args.paginationOpts)
-      : await ctx.db.query("images").order("desc").paginate(args.paginationOpts);
+      : await ctx.db
+          .query("images")
+          .withIndex("by_surface", (q) => q.eq("surface", args.surface))
+          .order("desc")
+          .paginate(args.paginationOpts);
 
     return {
       ...result,
@@ -392,6 +418,7 @@ export const listImagesPaginated = query({
 export const setImageReaction = mutation({
   args: {
     imageId: v.id("images"),
+    surface: v.union(v.literal("ai"), v.literal("art")),
     visitorId: v.string(),
     value: v.union(v.literal("like"), v.literal("dislike"), v.null()),
   },
@@ -441,6 +468,7 @@ export const setImageReaction = mutation({
 
     await ctx.scheduler.runAfter(0, internal.lineNotifications.sendGroupMessage, {
       event: args.value === "like" ? "liked" : "disliked",
+      surface: args.surface,
       title: image.title,
       category: image.category ?? undefined,
       country: image.country ?? undefined,
@@ -455,6 +483,7 @@ export const setImageReaction = mutation({
 export const notifyImageInteraction = mutation({
   args: {
     imageId: v.id("images"),
+    surface: v.union(v.literal("ai"), v.literal("art")),
     interaction: v.literal("comment_opened"),
   },
   handler: async (ctx, args) => {
@@ -466,6 +495,7 @@ export const notifyImageInteraction = mutation({
 
     await ctx.scheduler.runAfter(0, internal.lineNotifications.sendGroupMessage, {
       event: args.interaction,
+      surface: args.surface,
       title: image.title,
       category: image.category ?? undefined,
       country: image.country ?? undefined,
@@ -478,9 +508,15 @@ export const notifyImageInteraction = mutation({
 });
 
 export const listCategories = query({
-  args: {},
-  handler: async (ctx) => {
-    const images = await ctx.db.query("images").order("desc").collect();
+  args: {
+    surface: v.union(v.literal("ai"), v.literal("art")),
+  },
+  handler: async (ctx, args) => {
+    const images = await ctx.db
+      .query("images")
+      .withIndex("by_surface", (q) => q.eq("surface", args.surface))
+      .order("desc")
+      .collect();
     return Array.from(
       new Set(
         images
@@ -553,12 +589,23 @@ export const addImageComment = mutation({
 });
 
 export const getThemeSettings = query({
-  args: {},
-  handler: async (ctx) => {
-    const settings = await ctx.db
-      .query("siteSettings")
-      .withIndex("by_key", (q) => q.eq("key", THEME_SETTINGS_KEY))
-      .unique();
+  args: {
+    surface: v.union(v.literal("ai"), v.literal("art")),
+  },
+  handler: async (ctx, args) => {
+    const settings =
+      (await ctx.db
+        .query("siteSettings")
+        .withIndex("by_surface_and_key", (q) =>
+          q.eq("surface", args.surface).eq("key", THEME_SETTINGS_KEY),
+        )
+        .unique()) ??
+      (args.surface === "ai"
+        ? await ctx.db
+            .query("siteSettings")
+            .withIndex("by_key", (q) => q.eq("key", THEME_SETTINGS_KEY))
+            .unique()
+        : null);
 
     return settings
       ? {
@@ -574,6 +621,7 @@ export const getThemeSettings = query({
 export const saveThemeSettings = mutation({
   args: {
     sessionToken: v.string(),
+    surface: v.union(v.literal("ai"), v.literal("art")),
     brandColor: v.string(),
     secondaryColor: v.string(),
     accentColor: v.string(),
@@ -597,11 +645,14 @@ export const saveThemeSettings = mutation({
 
     const existingSettings = await ctx.db
       .query("siteSettings")
-      .withIndex("by_key", (q) => q.eq("key", THEME_SETTINGS_KEY))
+      .withIndex("by_surface_and_key", (q) =>
+        q.eq("surface", args.surface).eq("key", THEME_SETTINGS_KEY),
+      )
       .unique();
 
     if (existingSettings) {
       await ctx.db.patch("siteSettings", existingSettings._id, {
+        surface: args.surface,
         brandColor,
         secondaryColor,
         accentColor,
@@ -610,6 +661,7 @@ export const saveThemeSettings = mutation({
     } else {
       await ctx.db.insert("siteSettings", {
         key: THEME_SETTINGS_KEY,
+        surface: args.surface,
         brandColor,
         secondaryColor,
         accentColor,
@@ -619,6 +671,7 @@ export const saveThemeSettings = mutation({
 
     await ctx.scheduler.runAfter(0, internal.lineNotifications.sendGroupMessage, {
       event: "theme_changed",
+      surface: args.surface,
       brandColor,
       secondaryColor,
       accentColor,
@@ -626,5 +679,41 @@ export const saveThemeSettings = mutation({
     });
 
     return { brandColor, secondaryColor, accentColor, textColor };
+  },
+});
+
+export const backfillLegacyAiSurfaceData = mutation({
+  args: {},
+  handler: async (ctx) => {
+    let updatedImageCount = 0;
+
+    for await (const image of ctx.db.query("images")) {
+      if (image.surface !== undefined) {
+        continue;
+      }
+
+      await ctx.db.patch("images", image._id, {
+        surface: "ai",
+      });
+      updatedImageCount += 1;
+    }
+
+    let updatedThemeCount = 0;
+
+    for await (const setting of ctx.db.query("siteSettings")) {
+      if (setting.surface !== undefined || setting.key !== THEME_SETTINGS_KEY) {
+        continue;
+      }
+
+      await ctx.db.patch("siteSettings", setting._id, {
+        surface: "ai",
+      });
+      updatedThemeCount += 1;
+    }
+
+    return {
+      updatedImageCount,
+      updatedThemeCount,
+    };
   },
 });

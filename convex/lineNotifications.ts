@@ -18,6 +18,7 @@ export const sendGroupMessage = internalAction({
       v.literal("liked"),
       v.literal("disliked"),
     ),
+    surface: v.union(v.literal("ai"), v.literal("art")),
     title: v.optional(v.string()),
     category: v.optional(v.string()),
     country: v.optional(v.string()),
@@ -39,17 +40,19 @@ export const sendGroupMessage = internalAction({
     const location = formatLocation([args.streetAddress, args.city, args.country]);
     const title = args.title?.trim() || "Untitled image";
     const category = args.category?.trim() || "Uncategorized";
+    const surfaceLabel = args.surface === "art" ? "Jayden Art" : "Jayden AI";
+    const prefix = `[${surfaceLabel}]`;
 
     const text =
       args.event === "theme_changed"
-        ? `Jayden changed gallery colors: ${[args.brandColor, args.secondaryColor, args.accentColor, args.textColor].filter(Boolean).join(", ")}`
+        ? `${prefix} Jayden changed gallery colors: ${[args.brandColor, args.secondaryColor, args.accentColor, args.textColor].filter(Boolean).join(", ")}`
         : args.event === "comment_opened"
-          ? `Someone opened comments for: ${title} | ${category} | ${location}`
+          ? `${prefix} Someone opened comments for: ${title} | ${category} | ${location}`
           : args.event === "liked"
-            ? `Someone liked: ${title} | ${category} | ${location}`
+            ? `${prefix} Someone liked: ${title} | ${category} | ${location}`
             : args.event === "disliked"
-              ? `Someone disliked: ${title} | ${category} | ${location}`
-              : `Jayden ${args.event === "created" ? "added" : "updated"}: ${title} | ${category} | ${location}`;
+              ? `${prefix} Someone disliked: ${title} | ${category} | ${location}`
+              : `${prefix} Jayden ${args.event === "created" ? "added" : "updated"}: ${title} | ${category} | ${location}`;
 
     const response = await fetch(LINE_PUSH_ENDPOINT, {
       method: "POST",

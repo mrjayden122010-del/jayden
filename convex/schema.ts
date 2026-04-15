@@ -20,6 +20,7 @@ export default defineSchema({
     .index("by_image_id_and_visitor_id", ["imageId", "visitorId"]),
   images: defineTable({
     storageId: v.id("_storage"),
+    surface: v.optional(v.union(v.literal("ai"), v.literal("art"))),
     category: v.optional(v.string()),
     title: v.string(),
     caption: v.string(),
@@ -28,6 +29,8 @@ export default defineSchema({
     city: v.optional(v.string()),
     streetAddress: v.optional(v.string()),
   })
+    .index("by_surface", ["surface"])
+    .index("by_surface_and_category", ["surface", "category"])
     .index("by_category", ["category"])
     .index("by_country_and_city", ["country", "city"]),
   lineWebhookSources: defineTable({
@@ -40,9 +43,12 @@ export default defineSchema({
     .index("by_last_seen_at", ["lastSeenAt"]),
   siteSettings: defineTable({
     key: v.string(),
+    surface: v.optional(v.union(v.literal("ai"), v.literal("art"))),
     brandColor: v.string(),
     secondaryColor: v.optional(v.string()),
     accentColor: v.optional(v.string()),
     textColor: v.optional(v.string()),
-  }).index("by_key", ["key"]),
+  })
+    .index("by_key", ["key"])
+    .index("by_surface_and_key", ["surface", "key"]),
 });
