@@ -87,6 +87,15 @@ const requireAdminSession = async (ctx: MutationCtx, sessionToken: string) => {
   return session;
 };
 
+const assertImageMatchesSurface = (
+  image: { surface?: "ai" | "art" },
+  surface: "ai" | "art",
+) => {
+  if ((image.surface ?? "ai") !== surface) {
+    throw new Error("This photo no longer exists in the selected gallery.");
+  }
+};
+
 export const getAuthState = query({
   args: {
     sessionToken: v.union(v.string(), v.null()),
@@ -279,6 +288,70 @@ export const updateImageEntry = mutation({
       city: city || undefined,
       streetAddress: streetAddress || undefined,
     });
+
+    return { imageId: args.imageId };
+  },
+});
+
+export const replaceImageFile = mutation({
+  args: {
+    sessionToken: v.string(),
+    surface: v.union(v.literal("ai"), v.literal("art")),
+    imageId: v.id("images"),
+    storageId: v.id("_storage"),
+  },
+  handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
+    const existingImage = await ctx.db.get(args.imageId);
+
+    if (!existingImage) {
+      throw new Error("This photo no longer exists.");
+    }
+
+    assertImageMatchesSurface(existingImage, args.surface);
+
+    const previousStorageId = existingImage.storageId;
+
+    await ctx.db.patch("images", args.imageId, {
+      storageId: args.storageId,
+    });
+
+    await ctx.storage.delete(previousStorageId);
+
+    return { imageId: args.imageId, storageId: args.storageId };
+  },
+});
+
+export const deleteImageEntry = mutation({
+  args: {
+    sessionToken: v.string(),
+    surface: v.union(v.literal("ai"), v.literal("art")),
+    imageId: v.id("images"),
+  },
+  handler: async (ctx, args) => {
+    await requireAdminSession(ctx, args.sessionToken);
+    const existingImage = await ctx.db.get(args.imageId);
+
+    if (!existingImage) {
+      throw new Error("This photo no longer exists.");
+    }
+
+    assertImageMatchesSurface(existingImage, args.surface);
+
+    for await (const comment of ctx.db
+      .query("imageComments")
+      .withIndex("by_image_id", (q) => q.eq("imageId", args.imageId))) {
+      await ctx.db.delete(comment._id);
+    }
+
+    for await (const reaction of ctx.db
+      .query("imageReactions")
+      .withIndex("by_image_id", (q) => q.eq("imageId", args.imageId))) {
+      await ctx.db.delete(reaction._id);
+    }
+
+    await ctx.db.delete(args.imageId);
+    await ctx.storage.delete(existingImage.storageId);
 
     return { imageId: args.imageId };
   },
@@ -706,5 +779,32 @@ export const backfillLegacyAiSurfaceData = mutation({
       updatedImageCount,
       updatedThemeCount,
     };
+  },
+});
+
+export const clearArtImageLocations = mutation({
+  args: {},
+  handler: async (ctx) => {
+    let updatedImageCount = 0;
+
+    for await (const image of ctx.db
+      .query("images")
+      .withIndex("by_surface", (q) => q.eq("surface", "art"))) {
+      if (!image.country && !image.city && !image.streetAddress) {
+        continue;
+      }
+
+      await ctx.db.replace("images", image._id, {
+        storageId: image.storageId,
+        surface: image.surface,
+        category: image.category,
+        title: image.title,
+        caption: image.caption,
+        commentCount: image.commentCount,
+      });
+      updatedImageCount += 1;
+    }
+
+    return { updatedImageCount };
   },
 });

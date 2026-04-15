@@ -197,6 +197,8 @@ export default function App({ defaultThemeColors }: AppProps) {
   const generateUploadUrl = useMutation(api.gallery.generateUploadUrl);
   const createImageEntry = useMutation(api.gallery.createImageEntry);
   const updateImageEntry = useMutation(api.gallery.updateImageEntry);
+  const replaceImageFile = useMutation(api.gallery.replaceImageFile);
+  const deleteImageEntry = useMutation(api.gallery.deleteImageEntry);
   const saveThemeSettings = useMutation(api.gallery.saveThemeSettings);
   const addImageComment = useMutation(api.gallery.addImageComment);
   const setImageReaction = useMutation(api.gallery.setImageReaction);
@@ -212,14 +214,18 @@ export default function App({ defaultThemeColors }: AppProps) {
   const [editTitle, setEditTitle] = useState("");
   const [editCaption, setEditCaption] = useState("");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [isDeletingImage, setIsDeletingImage] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("");
   const [title, setTitle] = useState("");
   const [caption, setCaption] = useState("");
   const [editCategory, setEditCategory] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [replacementFile, setReplacementFile] = useState<File | null>(null);
+  const [replacementPreviewUrl, setReplacementPreviewUrl] = useState<string | null>(null);
   const [isDragActive, setIsDragActive] = useState(false);
   const [isPastingPhoto, setIsPastingPhoto] = useState(false);
+  const [isPastingReplacementPhoto, setIsPastingReplacementPhoto] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [editErrorMessage, setEditErrorMessage] = useState("");
@@ -265,6 +271,20 @@ export default function App({ defaultThemeColors }: AppProps) {
     };
   }, [selectedFile]);
 
+  useEffect(() => {
+    if (!replacementFile) {
+      setReplacementPreviewUrl(null);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(replacementFile);
+    setReplacementPreviewUrl(objectUrl);
+
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [replacementFile]);
+
   const isFormValid = Boolean(
     selectedCategory.trim() !== "" &&
     title.trim() !== "" &&
@@ -299,6 +319,10 @@ export default function App({ defaultThemeColors }: AppProps) {
   const isAuthenticated = authState?.isAuthenticated ?? false;
   const categoryOptions = useMemo(() => categories ?? [], [categories]);
   const filteredImages = useMemo(() => images ?? [], [images]);
+  const editingImage = useMemo(
+    () => filteredImages.find((image) => image._id === editingImageId) ?? null,
+    [editingImageId, filteredImages],
+  );
   const categoryTabs = useMemo(
     () => [{ label: "All", value: "__all__" }, ...categoryOptions.map((category) => ({ label: category, value: category }))],
     [categoryOptions],
@@ -390,15 +414,18 @@ export default function App({ defaultThemeColors }: AppProps) {
   };
 
   const handleEditDialogClose = () => {
-    if (isSavingEdit) {
+    if (isSavingEdit || isDeletingImage) {
       return;
     }
 
     setIsSavingEdit(false);
+    setIsDeletingImage(false);
     setEditingImageId(null);
     setEditCategory("");
     setEditTitle("");
     setEditCaption("");
+    setReplacementFile(null);
+    setReplacementPreviewUrl(null);
     setEditErrorMessage("");
   };
 
@@ -417,11 +444,28 @@ export default function App({ defaultThemeColors }: AppProps) {
     setErrorMessage("");
   };
 
+  const handleReplacementFile = (file: File | null) => {
+    if (!file) {
+      setReplacementFile(null);
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      setEditErrorMessage("Please choose an image file for the replacement photo.");
+      return;
+    }
+
+    setReplacementFile(file);
+    setEditErrorMessage("");
+  };
+
   const handleEditOpen = (image: NonNullable<typeof images>[number]) => {
     setEditingImageId(image._id);
     setEditCategory(image.category ?? "");
     setEditTitle(image.title);
     setEditCaption(image.caption);
+    setReplacementFile(null);
+    setReplacementPreviewUrl(null);
     setEditErrorMessage("");
   };
 
@@ -458,6 +502,12 @@ export default function App({ defaultThemeColors }: AppProps) {
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
     handleSelectedFile(file);
+    event.target.value = "";
+  };
+
+  const handleReplacementFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    handleReplacementFile(file);
     event.target.value = "";
   };
 
@@ -527,6 +577,47 @@ export default function App({ defaultThemeColors }: AppProps) {
       );
     } finally {
       setIsPastingPhoto(false);
+    }
+  };
+
+  const handlePasteReplacementButtonClick = async () => {
+    if (typeof navigator === "undefined" || !navigator.clipboard?.read) {
+      setEditErrorMessage("Clipboard paste is not supported here. Use Select Replacement instead.");
+      return;
+    }
+
+    setIsPastingReplacementPhoto(true);
+    setEditErrorMessage("");
+
+    try {
+      const clipboardItems = await navigator.clipboard.read();
+
+      for (const clipboardItem of clipboardItems) {
+        const imageType = clipboardItem.types.find((type) => type.startsWith("image/"));
+
+        if (!imageType) {
+          continue;
+        }
+
+        const blob = await clipboardItem.getType(imageType);
+        const file = new File([blob], `replacement-photo.${mimeTypeToExtension(imageType)}`, {
+          type: imageType,
+          lastModified: Date.now(),
+        });
+
+        handleReplacementFile(file);
+        return;
+      }
+
+      setEditErrorMessage("No photo found in your clipboard. Copy an image first, then try Paste Replacement.");
+    } catch (error) {
+      setEditErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not read the clipboard. Use Select Replacement instead.",
+      );
+    } finally {
+      setIsPastingReplacementPhoto(false);
     }
   };
 
@@ -678,6 +769,30 @@ export default function App({ defaultThemeColors }: AppProps) {
     setEditErrorMessage("");
 
     try {
+      if (replacementFile) {
+        const uploadUrl = await generateUploadUrl({ sessionToken: activeSessionToken });
+        const uploadResponse = await fetch(uploadUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": replacementFile.type || "application/octet-stream",
+          },
+          body: replacementFile,
+        });
+
+        if (!uploadResponse.ok) {
+          throw new Error("Replacement image upload failed.");
+        }
+
+        const { storageId } = (await uploadResponse.json()) as UploadResult;
+
+        await replaceImageFile({
+          sessionToken: activeSessionToken,
+          surface: activeSurface,
+          imageId: editingImageId,
+          storageId,
+        });
+      }
+
       await updateImageEntry({
         sessionToken: activeSessionToken,
         surface: activeSurface,
@@ -692,12 +807,57 @@ export default function App({ defaultThemeColors }: AppProps) {
       setEditCategory("");
       setEditTitle("");
       setEditCaption("");
+      setReplacementFile(null);
+      setReplacementPreviewUrl(null);
       setEditErrorMessage("");
     } catch (error) {
       setEditErrorMessage(
         handleProtectedActionError(error, "Something went wrong while saving your changes."),
       );
       setIsSavingEdit(false);
+    }
+  };
+
+  const handleDeleteImage = async () => {
+    let activeSessionToken: string;
+
+    try {
+      activeSessionToken = requireSessionToken();
+    } catch (error) {
+      setEditErrorMessage(handleProtectedActionError(error, "Please log in to continue."));
+      return;
+    }
+
+    if (!editingImageId) {
+      return;
+    }
+
+    const confirmed =
+      typeof window === "undefined"
+        ? true
+        : window.confirm("Delete this photo permanently? This will also remove its comments and reactions.");
+
+    if (!confirmed) {
+      return;
+    }
+
+    setIsDeletingImage(true);
+    setEditErrorMessage("");
+
+    try {
+      await deleteImageEntry({
+        sessionToken: activeSessionToken,
+        surface: activeSurface,
+        imageId: editingImageId,
+      });
+
+      setIsDeletingImage(false);
+      handleEditDialogClose();
+    } catch (error) {
+      setEditErrorMessage(
+        handleProtectedActionError(error, "Something went wrong while deleting this photo."),
+      );
+      setIsDeletingImage(false);
     }
   };
 
@@ -815,6 +975,7 @@ export default function App({ defaultThemeColors }: AppProps) {
   const activeSurfaceLabel = isArtPage ? "Jayden's Art" : "Jayden's AI";
   const activeSurfaceShortLabel = isArtPage ? "Jayden Art" : "Jayden AI";
   const isProfileMenuOpen = Boolean(profileMenuAnchorEl);
+  const shouldShowLocationDetails = !isArtPage;
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -1440,7 +1601,7 @@ export default function App({ defaultThemeColors }: AppProps) {
                           <Typography variant="body1" color="text.secondary">
                             {image.caption}
                           </Typography>
-                          {image.country || image.city || image.streetAddress ? (
+                          {shouldShowLocationDetails && (image.country || image.city || image.streetAddress) ? (
                             <Chip
                               label={[image.streetAddress, image.city, image.country].filter(Boolean).join(", ")}
                               variant="outlined"
@@ -1698,7 +1859,7 @@ export default function App({ defaultThemeColors }: AppProps) {
                   <Typography variant="body1" color="text.secondary">
                     {activeImage.caption}
                   </Typography>
-                  {activeImage.country || activeImage.city || activeImage.streetAddress ? (
+                  {shouldShowLocationDetails && (activeImage.country || activeImage.city || activeImage.streetAddress) ? (
                     <Chip
                       label={[activeImage.streetAddress, activeImage.city, activeImage.country].filter(Boolean).join(", ")}
                       variant="outlined"
@@ -2126,12 +2287,94 @@ export default function App({ defaultThemeColors }: AppProps) {
         <DialogTitle sx={{ pb: 1 }}>
           <Typography variant="h4">Edit image details</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
-            Update the title, caption, and details for this gallery card.
+            Update the title and caption, replace the photo file, or delete the photo entirely.
           </Typography>
         </DialogTitle>
         <DialogContent>
           <Stack spacing={2.5} sx={{ pt: 1 }}>
             {editErrorMessage ? <Alert severity="error">{editErrorMessage}</Alert> : null}
+            <Paper
+              variant="outlined"
+              sx={{
+                p: 2,
+                borderStyle: "dashed",
+                borderWidth: 1.5,
+                borderColor: alpha(theme.palette.primary.dark, 0.18),
+                backgroundColor: alpha("#ffffff", 0.92),
+              }}
+            >
+              <Stack spacing={1.5}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                  Replace Photo
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Leave this empty to keep the current photo. Add a new image here to replace it.
+                </Typography>
+                <Box
+                  sx={{
+                    width: "100%",
+                    minHeight: 220,
+                    display: "grid",
+                    placeItems: "center",
+                    background: `linear-gradient(135deg, ${alpha("#ffffff", 0.7)}, ${alpha(theme.palette.primary.light, 0.12)})`,
+                    border: `1px solid ${alpha(theme.palette.primary.dark, 0.14)}`,
+                    overflow: "hidden",
+                  }}
+                >
+                  {replacementPreviewUrl ? (
+                    <Box
+                      component="img"
+                      src={replacementPreviewUrl}
+                      alt={replacementFile?.name ?? "Replacement preview"}
+                      sx={{ width: "100%", maxHeight: 260, objectFit: "cover" }}
+                    />
+                  ) : editingImage?.imageUrl ? (
+                    <Box
+                      component="img"
+                      src={editingImage.imageUrl}
+                      alt={editingImage.title}
+                      sx={{ width: "100%", maxHeight: 260, objectFit: "cover" }}
+                    />
+                  ) : (
+                    <Typography color="text.secondary">Current image unavailable</Typography>
+                  )}
+                </Box>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+                  <Button
+                    variant="outlined"
+                    component="label"
+                    disabled={isSavingEdit || isDeletingImage || isPastingReplacementPhoto}
+                  >
+                    Select Replacement
+                    <input hidden accept="image/*" type="file" onChange={handleReplacementFileChange} />
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    onClick={() => {
+                      void handlePasteReplacementButtonClick();
+                    }}
+                    disabled={isSavingEdit || isDeletingImage || isPastingReplacementPhoto}
+                  >
+                    {isPastingReplacementPhoto ? "Pasting..." : "Paste Replacement"}
+                  </Button>
+                  {replacementFile ? (
+                    <Button
+                      variant="text"
+                      color="inherit"
+                      onClick={() => setReplacementFile(null)}
+                      disabled={isSavingEdit || isDeletingImage}
+                    >
+                      Clear Replacement
+                    </Button>
+                  ) : null}
+                </Stack>
+                <Typography variant="body2" color="text.secondary">
+                  {replacementFile
+                    ? `Replacement ready: ${replacementFile.name}`
+                    : "No replacement selected. The current photo will stay the same."}
+                </Typography>
+              </Stack>
+            </Paper>
             <Autocomplete
               freeSolo
               options={categoryOptions}
@@ -2165,19 +2408,30 @@ export default function App({ defaultThemeColors }: AppProps) {
             />
           </Stack>
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 3 }}>
-          <Button onClick={handleEditDialogClose} disabled={isSavingEdit}>
+        <DialogActions sx={{ px: 3, pb: 3, justifyContent: "space-between" }}>
+          <Button
+            color="error"
+            onClick={() => {
+              void handleDeleteImage();
+            }}
+            disabled={isSavingEdit || isDeletingImage}
+          >
+            {isDeletingImage ? "Deleting..." : "Delete Photo"}
+          </Button>
+          <Stack direction="row" spacing={1.25}>
+          <Button onClick={handleEditDialogClose} disabled={isSavingEdit || isDeletingImage}>
             Cancel
           </Button>
           <Button
             variant="contained"
-            disabled={!isEditFormValid || isSavingEdit}
+            disabled={!isEditFormValid || isSavingEdit || isDeletingImage}
             onClick={() => {
               void handleEditSave();
             }}
           >
-            {isSavingEdit ? "Saving..." : "Save Changes"}
+            {isSavingEdit ? "Saving..." : replacementFile ? "Save And Replace" : "Save Changes"}
           </Button>
+          </Stack>
         </DialogActions>
       </Dialog>
 
