@@ -18,18 +18,21 @@ import {
   DialogContent,
   DialogTitle,
   IconButton,
+  Menu,
+  MenuItem,
   Popover,
   Paper,
   Stack,
+  SvgIcon,
   Tab,
   Tabs,
   TextField,
   Toolbar,
   Typography,
 } from "@mui/material";
+import type { SvgIconProps } from "@mui/material/SvgIcon";
 import { alpha, darken, lighten, useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import { Filter, LogIn, LogOut, MessageCircleMore, ThumbsDown, ThumbsUp } from "lucide-react";
 import { City, Country, type ICity, type ICountry } from "country-state-city";
 import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
@@ -54,9 +57,23 @@ type LocationOption = {
   name: string;
 };
 
+type AppRoute = "/" | "/ai" | "/art";
+
 const HEX_COLOR_PATTERN = /^#([0-9A-F]{6})$/;
 const ADMIN_SESSION_STORAGE_KEY = "jayden-gallery-admin-session";
 const PUBLIC_VISITOR_ID_STORAGE_KEY = "jayden-gallery-public-visitor-id";
+
+const normalizeAppPath = (pathname: string): AppRoute => {
+  if (pathname === "/ai") {
+    return "/ai";
+  }
+
+  if (pathname === "/art") {
+    return "/art";
+  }
+
+  return "/";
+};
 
 const normalizeHexColor = (value: string) => value.trim().toUpperCase();
 const normalizeCategoryValue = (value: string) => value.trim();
@@ -104,10 +121,61 @@ const mapCityOption = (city: ICity): LocationOption => ({
   name: city.name,
 });
 
+const LoginOutlinedIcon = (props: SvgIconProps) => (
+  <SvgIcon {...props}>
+    <path d="M10.09 15.59 11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67z" />
+    <path d="M19 3H5c-1.1 0-2 .9-2 2v4h2V5h14v14H5v-4H3v4c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
+  </SvgIcon>
+);
+
+const LogoutOutlinedIcon = (props: SvgIconProps) => (
+  <SvgIcon {...props}>
+    <path d="m17 7-1.41 1.41L17.17 10H8v2h9.17l-1.58 1.59L17 15l5-5z" />
+    <path d="M4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4z" />
+  </SvgIcon>
+);
+
+const FilterAltOutlinedIcon = (props: SvgIconProps) => (
+  <SvgIcon {...props}>
+    <path d="M7 6h10l-3.55 4.73-.45.6V17l-2 1v-6.67l-.45-.6zM4.25 4A1.25 1.25 0 0 0 3 5.25c0 .27.09.53.25.75L9 13.67V20l6-3v-3.33L20.75 6c.16-.22.25-.48.25-.75A1.25 1.25 0 0 0 19.75 4z" />
+  </SvgIcon>
+);
+
+const CommentOutlinedIcon = (props: SvgIconProps) => (
+  <SvgIcon {...props}>
+    <path d="M4 4h16v12H6l-2 2zm0-2c-1.1 0-2 .9-2 2v17l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" />
+  </SvgIcon>
+);
+
+const AccountCircleOutlinedIcon = (props: SvgIconProps) => (
+  <SvgIcon {...props}>
+    <path d="M12 12c2.76 0 5-2.24 5-5S14.76 2 12 2 7 4.24 7 7s2.24 5 5 5m0 2c-3.33 0-10 1.67-10 5v3h20v-3c0-3.33-6.67-5-10-5m0 2c3.69 0 7.11 1.18 8 2.5V20H4v-1.5c.89-1.32 4.31-2.5 8-2.5" />
+  </SvgIcon>
+);
+
+const ThumbUpAltOutlinedIcon = (props: SvgIconProps) => (
+  <SvgIcon {...props}>
+    <path d="M13.12 2 7.58 7.54C7.22 7.9 7 8.4 7 8.93V19c0 1.1.9 2 2 2h7c.82 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-1c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.45-1.08zM5 21H3V9h2z" />
+  </SvgIcon>
+);
+
+const ThumbDownAltOutlinedIcon = (props: SvgIconProps) => (
+  <SvgIcon {...props}>
+    <path d="M10.88 22 16.42 16.46c.36-.36.58-.86.58-1.39V5c0-1.1-.9-2-2-2H8c-.82 0-1.54.5-1.84 1.22L3.14 11.27c-.09.23-.14.47-.14.73v1c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.45 1.08zM19 3h2v12h-2z" />
+  </SvgIcon>
+);
+
 export default function App({ defaultThemeColors }: AppProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const pageSize = isMobile ? 3 : 6;
+  const [currentRoute, setCurrentRoute] = useState<AppRoute>(() => {
+    if (typeof window === "undefined") {
+      return "/";
+    }
+
+    return normalizeAppPath(window.location.pathname);
+  });
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string | null>(null);
   const [visitorId] = useState<string | null>(() => {
     if (typeof window === "undefined") {
@@ -197,6 +265,7 @@ export default function App({ defaultThemeColors }: AppProps) {
   const [shouldScrollToComments, setShouldScrollToComments] = useState(false);
   const [reactionErrorMessage, setReactionErrorMessage] = useState("");
   const [pendingReactionImageId, setPendingReactionImageId] = useState<Id<"images"> | null>(null);
+  const [profileMenuAnchorEl, setProfileMenuAnchorEl] = useState<HTMLElement | null>(null);
   const commentsSectionRef = useRef<HTMLDivElement | null>(null);
   const loadMoreTriggerRef = useRef<HTMLDivElement | null>(null);
 
@@ -892,6 +961,27 @@ export default function App({ defaultThemeColors }: AppProps) {
   );
   const isFilterOpen = Boolean(filterAnchorEl);
   const isCommentFormValid = Boolean(commentAuthorName.trim() && commentBody.trim());
+  const activeBrandTab = currentRoute === "/ai" ? "ai" : currentRoute === "/art" ? "art" : false;
+  const isAiPage = currentRoute === "/ai";
+  const isArtPage = currentRoute === "/art";
+  const isHomePage = currentRoute === "/";
+  const isProfileMenuOpen = Boolean(profileMenuAnchorEl);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const handlePopState = () => {
+      setCurrentRoute(normalizeAppPath(window.location.pathname));
+    };
+
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
 
   useEffect(() => {
     setCommentAuthorName("");
@@ -989,6 +1079,31 @@ export default function App({ defaultThemeColors }: AppProps) {
     }
   };
 
+  const navigateTo = (path: AppRoute) => {
+    if (typeof window === "undefined") {
+      setCurrentRoute(path);
+      return;
+    }
+
+    const nextPath = normalizeAppPath(path);
+
+    if (normalizeAppPath(window.location.pathname) !== nextPath) {
+      window.history.pushState({}, "", nextPath);
+    }
+
+    setCurrentRoute(nextPath);
+    setFilterAnchorEl(null);
+  };
+
+  const openThemeDialog = () => {
+    setBrandColorInput(defaultThemeColors.brandColor);
+    setSecondaryColorInput(defaultThemeColors.secondaryColor);
+    setAccentColorInput(defaultThemeColors.accentColor);
+    setTextColorInput(defaultThemeColors.textColor);
+    setThemeErrorMessage("");
+    setIsThemeDialogOpen(true);
+  };
+
   const handleReactionSubmit = async (
     imageId: Id<"images">,
     currentReaction: "like" | "dislike" | null,
@@ -1016,6 +1131,139 @@ export default function App({ defaultThemeColors }: AppProps) {
       setPendingReactionImageId(null);
     }
   };
+
+  const heroPanel = (
+    <Paper
+      elevation={0}
+      sx={{
+        p: { xs: 3, md: 5 },
+        border: `1px solid ${alpha(theme.palette.primary.dark, 0.18)}`,
+        background: `linear-gradient(145deg, ${alpha("#ffffff", 0.8)}, ${alpha(theme.palette.primary.light, 0.18)})`,
+        boxShadow: `0 24px 60px ${alpha(theme.palette.primary.dark, 0.12)}, inset 0 0 0 1px ${alpha("#ffffff", 0.58)}`,
+        backdropFilter: "blur(18px)",
+        position: "relative",
+        overflow: "hidden",
+        "&::after": {
+          content: '""',
+          position: "absolute",
+          top: -40,
+          right: -20,
+          width: 180,
+          height: 180,
+          borderRadius: "50%",
+          background: `radial-gradient(circle, ${alpha("#ffffff", 0.75)}, ${alpha("#ffffff", 0)} 70%)`,
+        },
+      }}
+    >
+      <Stack spacing={2.5} sx={{ position: "relative", zIndex: 1, alignItems: "center", textAlign: "center" }}>
+        <Typography variant="overline" sx={{ color: "primary.dark", letterSpacing: "0.24em", fontWeight: 800 }}>
+          Jayden&apos;s Art World
+        </Typography>
+        <Typography variant="h2" sx={{ fontSize: { xs: "2.8rem", md: "4.6rem" }, maxWidth: 920 }}>
+          Jayden&apos;s AI
+        </Typography>
+        <Typography variant="h6" color="text.secondary" sx={{ maxWidth: 760, lineHeight: 1.65 }}>
+          This gallery is a collection of Jayden&apos;s artwork made with AI, brought together in one dreamy archive.
+          Every image holds a different mood, idea, and little piece of the world Jayden is building.
+        </Typography>
+      </Stack>
+    </Paper>
+  );
+
+  const landingPage = (
+    <Stack spacing={4}>
+      <Paper
+        elevation={0}
+        sx={{
+          p: { xs: 3.5, md: 6 },
+          border: `1px solid ${alpha(theme.palette.primary.dark, 0.18)}`,
+          background: `linear-gradient(145deg, ${alpha("#ffffff", 0.82)}, ${alpha(theme.palette.primary.light, 0.16)})`,
+          boxShadow: `0 24px 60px ${alpha(theme.palette.primary.dark, 0.12)}, inset 0 0 0 1px ${alpha("#ffffff", 0.58)}`,
+          textAlign: "center",
+        }}
+      >
+        <Stack spacing={2.5} sx={{ alignItems: "center" }}>
+          <Typography variant="overline" sx={{ color: "primary.dark", letterSpacing: "0.22em", fontWeight: 800 }}>
+            Choose A World
+          </Typography>
+          <Typography variant="h2" sx={{ fontSize: { xs: "2.6rem", md: "4.2rem" } }}>
+            Jayden&apos;s Creative Spaces
+          </Typography>
+          <Typography variant="h6" color="text.secondary" sx={{ maxWidth: 760, lineHeight: 1.65 }}>
+            Pick the space you want to open now, then move between Jayden&apos;s AI and Jayden&apos;s Art from the
+            centered navbar tabs.
+          </Typography>
+        </Stack>
+      </Paper>
+      <Box sx={{ display: "grid", gap: 3, gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" } }}>
+        {[
+          {
+            title: "Jayden's AI",
+            description: "Open the live AI gallery with comments, reactions, filters, and the current image archive.",
+            path: "/ai" as const,
+          },
+          {
+            title: "Jayden's Art",
+            description: "Open the art section for Jayden's non-AI world and any future curated work.",
+            path: "/art" as const,
+          },
+        ].map((destination) => (
+          <Card
+            key={destination.path}
+            elevation={0}
+            sx={{
+              borderRadius: 0,
+              border: `1px solid ${alpha(theme.palette.primary.dark, 0.18)}`,
+              background: `linear-gradient(180deg, ${alpha("#ffffff", 0.84)}, ${alpha(theme.palette.primary.light, 0.18)})`,
+              boxShadow: `0 20px 42px ${alpha(theme.palette.primary.dark, 0.12)}`,
+            }}
+          >
+            <CardActionArea onClick={() => navigateTo(destination.path)} sx={{ height: "100%", alignItems: "stretch" }}>
+              <CardContent sx={{ p: 3.5 }}>
+                <Stack spacing={2.25}>
+                  <Typography variant="h4">{destination.title}</Typography>
+                  <Typography variant="body1" color="text.secondary">
+                    {destination.description}
+                  </Typography>
+                  <Box sx={{ pt: 1 }}>
+                    <Button variant="contained">Open {destination.title}</Button>
+                  </Box>
+                </Stack>
+              </CardContent>
+            </CardActionArea>
+          </Card>
+        ))}
+      </Box>
+    </Stack>
+  );
+
+  const artPage = (
+    <Paper
+      elevation={0}
+      sx={{
+        p: { xs: 3.5, md: 6 },
+        border: `1px solid ${alpha(theme.palette.primary.dark, 0.18)}`,
+        background: `linear-gradient(145deg, ${alpha("#ffffff", 0.82)}, ${alpha(theme.palette.info.light, 0.14)})`,
+        boxShadow: `0 24px 60px ${alpha(theme.palette.primary.dark, 0.12)}, inset 0 0 0 1px ${alpha("#ffffff", 0.58)}`,
+      }}
+    >
+      <Stack spacing={2.5} sx={{ alignItems: "center", textAlign: "center" }}>
+        <Typography variant="overline" sx={{ color: "primary.dark", letterSpacing: "0.22em", fontWeight: 800 }}>
+          Jayden&apos;s Art
+        </Typography>
+        <Typography variant="h2" sx={{ fontSize: { xs: "2.6rem", md: "4.2rem" } }}>
+          Jayden&apos;s Art
+        </Typography>
+        <Typography variant="h6" color="text.secondary" sx={{ maxWidth: 760, lineHeight: 1.65 }}>
+          This page is ready for Jayden&apos;s art section. We can fill it with a dedicated gallery, writing, or a
+          separate collection next.
+        </Typography>
+        <Button variant="contained" onClick={() => navigateTo("/ai")}>
+          Go To Jayden&apos;s AI
+        </Button>
+      </Stack>
+    </Paper>
+  );
 
   return (
     <Box
@@ -1064,59 +1312,87 @@ export default function App({ defaultThemeColors }: AppProps) {
           borderBottom: `1px solid ${alpha(theme.palette.primary.dark, 0.14)}`,
         }}
       >
-        <Toolbar sx={{ gap: 2, justifyContent: "space-between", flexWrap: "wrap" }}>
-          <Box>
+        <Toolbar
+          sx={{
+            alignItems: "center",
+            minHeight: { xs: 72, md: 80 },
+            px: { xs: 1, sm: 2 },
+            gap: { xs: 1.5, md: 2.5 },
+            flexWrap: { xs: "wrap", md: "nowrap" },
+            position: "relative",
+          }}
+        >
+          <Box
+            onClick={() => navigateTo("/")}
+            sx={{
+              cursor: "pointer",
+              minWidth: 0,
+              flexShrink: 0,
+            }}
+          >
             <Typography variant="h6" sx={{ letterSpacing: "-0.03em", fontWeight: 700 }}>
-              Jayden Gallery
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              A personal gallery of Jayden&apos;s AI-generated artwork.
+              Jayden Ang
             </Typography>
           </Box>
-          <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
+          <Box
+            sx={{
+              flex: { xs: "1 0 100%", md: "0 0 auto" },
+              minWidth: { xs: "100%", md: 0 },
+              display: "flex",
+              justifyContent: "center",
+              order: { xs: 3, md: 2 },
+              position: { xs: "static", md: "absolute" },
+              left: { xs: "auto", md: "50%" },
+              transform: { xs: "none", md: "translateX(-50%)" },
+              width: { xs: "100%", md: "auto" },
+            }}
+          >
+            <Tabs
+              value={activeBrandTab}
+              onChange={(_, value: "ai" | "art") => navigateTo(value === "ai" ? "/ai" : "/art")}
+              aria-label="Brand sections"
+              sx={{
+                minHeight: 0,
+                backgroundColor: alpha("#ffffff", 0.4),
+                border: `1px solid ${alpha(theme.palette.primary.dark, 0.14)}`,
+                maxWidth: { xs: "100%", md: "none" },
+                "& .MuiTabs-indicator": {
+                  height: 3,
+                },
+                "& .MuiTab-root": {
+                  minHeight: 0,
+                  px: { xs: 2, sm: 3 },
+                  py: 1.25,
+                  fontWeight: 700,
+                  textTransform: "none",
+                },
+              }}
+            >
+              <Tab label="Jayden's AI" value="ai" />
+              <Tab label="Jayden's Art" value="art" />
+            </Tabs>
+          </Box>
+          <Stack
+            direction="row"
+            spacing={1.5}
+            sx={{
+              alignItems: "center",
+              marginLeft: "auto",
+              flexShrink: 0,
+              order: { xs: 2, md: 3 },
+            }}
+          >
             {isAuthenticated ? (
               <>
-                <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-                  <Button
-                    variant="outlined"
-                    color="primary"
-                    onClick={() => {
-                      setBrandColorInput(defaultThemeColors.brandColor);
-                      setSecondaryColorInput(defaultThemeColors.secondaryColor);
-                      setAccentColorInput(defaultThemeColors.accentColor);
-                      setTextColorInput(defaultThemeColors.textColor);
-                      setThemeErrorMessage("");
-                      setIsThemeDialogOpen(true);
-                    }}
-                    sx={{
-                      px: 2.6,
-                      py: 1.3,
-                      borderWidth: 1.5,
-                      backgroundColor: alpha("#ffffff", 0.45),
-                    }}
-                  >
-                    Theme Colors
-                  </Button>
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    onClick={() => setIsDialogOpen(true)}
-                    sx={{ px: 3.2, py: 1.3 }}
-                  >
-                    Upload Image
-                  </Button>
-                </Stack>
                 <IconButton
-                  aria-label="Log out"
-                  onClick={() => {
-                    void handleLogout();
-                  }}
+                  aria-label="Open profile menu"
+                  onClick={(event) => setProfileMenuAnchorEl(event.currentTarget)}
                   sx={{
                     border: `1px solid ${alpha(theme.palette.primary.dark, 0.18)}`,
                     backgroundColor: alpha("#ffffff", 0.55),
                   }}
                 >
-                  <LogOut size={20} strokeWidth={2.1} />
+                  <AccountCircleOutlinedIcon fontSize="small" />
                 </IconButton>
               </>
             ) : (
@@ -1128,69 +1404,58 @@ export default function App({ defaultThemeColors }: AppProps) {
                   backgroundColor: alpha("#ffffff", 0.55),
                 }}
               >
-                <LogIn size={20} strokeWidth={2.1} />
+                <LoginOutlinedIcon fontSize="small" />
               </IconButton>
             )}
           </Stack>
         </Toolbar>
       </AppBar>
-
-      <Container maxWidth="lg" sx={{ py: { xs: 6, md: 8 } }}>
-        <Stack spacing={4}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: { xs: 3, md: 5 },
-              border: `1px solid ${alpha(theme.palette.primary.dark, 0.18)}`,
-              background: `linear-gradient(145deg, ${alpha("#ffffff", 0.8)}, ${alpha(theme.palette.primary.light, 0.18)})`,
-              boxShadow: `0 24px 60px ${alpha(theme.palette.primary.dark, 0.12)}, inset 0 0 0 1px ${alpha("#ffffff", 0.58)}`,
-              backdropFilter: "blur(18px)",
-              position: "relative",
-              overflow: "hidden",
-              "&::after": {
-                content: '""',
-                position: "absolute",
-                top: -40,
-                right: -20,
-                width: 180,
-                height: 180,
-                borderRadius: "50%",
-                background: `radial-gradient(circle, ${alpha("#ffffff", 0.75)}, ${alpha("#ffffff", 0)} 70%)`,
-              },
+      <Menu
+        anchorEl={profileMenuAnchorEl}
+        open={isProfileMenuOpen}
+        onClose={() => setProfileMenuAnchorEl(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        {isAuthenticated ? (
+          <MenuItem
+            onClick={() => {
+              setProfileMenuAnchorEl(null);
+              openThemeDialog();
             }}
           >
-            <Stack
-              spacing={2.5}
-              sx={{
-                position: "relative",
-                zIndex: 1,
-                alignItems: "center",
-                textAlign: "center",
-              }}
-            >
-              <Typography
-                variant="overline"
-                sx={{ color: "primary.dark", letterSpacing: "0.24em", fontWeight: 800 }}
-              >
-                Jayden&apos;s Art World
-              </Typography>
-              <Typography
-                variant="h2"
-                sx={{ fontSize: { xs: "2.8rem", md: "4.6rem" }, maxWidth: 920 }}
-              >
-                Jayden&apos;s Gallery
-              </Typography>
-              <Typography
-                variant="h6"
-                color="text.secondary"
-                sx={{ maxWidth: 760, lineHeight: 1.65 }}
-              >
-                This gallery is a collection of Jayden&apos;s artwork made with AI, brought
-                together in one dreamy archive. Every image holds a different mood, idea,
-                and little piece of the world Jayden is building.
-              </Typography>
-            </Stack>
-          </Paper>
+            Theme Colors
+          </MenuItem>
+        ) : null}
+        {isAuthenticated && isAiPage ? (
+          <MenuItem
+            onClick={() => {
+              setProfileMenuAnchorEl(null);
+              setIsDialogOpen(true);
+            }}
+          >
+            Upload Image
+          </MenuItem>
+        ) : null}
+        <MenuItem
+          onClick={() => {
+            setProfileMenuAnchorEl(null);
+            void handleLogout();
+          }}
+        >
+          <LogoutOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
+          Log out
+        </MenuItem>
+      </Menu>
+
+      <Container maxWidth="lg" sx={{ py: { xs: 6, md: 8 } }}>
+        {isHomePage ? (
+          landingPage
+        ) : isArtPage ? (
+          artPage
+        ) : (
+        <Stack spacing={4}>
+          {heroPanel}
 
           {imagesStatus === "LoadingFirstPage" ? (
             <Stack spacing={2} sx={{ py: 10, alignItems: "center" }}>
@@ -1215,7 +1480,7 @@ export default function App({ defaultThemeColors }: AppProps) {
               </Typography>
               <Typography color="text.secondary">
                 {isAuthenticated
-                  ? "Use the upload button at the top to add the first image with a title and caption."
+                  ? "Use the profile menu in the top right to add the first image with a title and caption."
                   : "Use the login button in the top right to unlock uploads, edits, and theme controls."}
               </Typography>
             </Paper>
@@ -1288,17 +1553,17 @@ export default function App({ defaultThemeColors }: AppProps) {
                     ))}
                   </Tabs>
                 </Box>
-                <IconButton
-                  aria-label="Filter images"
-                  onClick={(event) => setFilterAnchorEl(event.currentTarget)}
+            <IconButton
+              aria-label="Filter images"
+              onClick={(event) => setFilterAnchorEl(event.currentTarget)}
                   sx={{
                     alignSelf: { xs: "flex-end", lg: "center" },
-                    border: `1px solid ${alpha(theme.palette.primary.dark, 0.18)}`,
-                    backgroundColor: alpha("#ffffff", 0.76),
-                  }}
-                >
-                  <Filter size={18} strokeWidth={2.1} />
-                </IconButton>
+                border: `1px solid ${alpha(theme.palette.primary.dark, 0.18)}`,
+                backgroundColor: alpha("#ffffff", 0.76),
+              }}
+            >
+              <FilterAltOutlinedIcon fontSize="small" />
+            </IconButton>
               </Stack>
               <Box
                 sx={{
@@ -1393,9 +1658,9 @@ export default function App({ defaultThemeColors }: AppProps) {
                     </CardActionArea>
                     <Stack spacing={1.25} sx={{ px: 2, pb: 2 }}>
                       <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: "wrap" }}>
-                        <Chip
-                          icon={<MessageCircleMore size={16} />}
-                          label={`${image.commentCount} ${image.commentCount === 1 ? "comment" : "comments"}`}
+                    <Chip
+                      icon={<CommentOutlinedIcon fontSize="small" />}
+                      label={`${image.commentCount} ${image.commentCount === 1 ? "comment" : "comments"}`}
                           variant="outlined"
                           color="primary"
                           clickable={!isAuthenticated}
@@ -1410,9 +1675,9 @@ export default function App({ defaultThemeColors }: AppProps) {
                           disabled={isAuthenticated}
                           sx={{ backgroundColor: alpha("#ffffff", 0.48) }}
                         />
-                        <Chip
-                          icon={<ThumbsUp size={16} />}
-                          label={image.likeCount}
+                    <Chip
+                      icon={<ThumbUpAltOutlinedIcon fontSize="small" />}
+                      label={image.likeCount}
                           variant={image.viewerReaction === "like" ? "filled" : "outlined"}
                           color="primary"
                           clickable={!isAuthenticated}
@@ -1426,9 +1691,9 @@ export default function App({ defaultThemeColors }: AppProps) {
                           disabled={isAuthenticated || pendingReactionImageId === image._id}
                           sx={{ backgroundColor: alpha("#ffffff", 0.48) }}
                         />
-                        <Chip
-                          icon={<ThumbsDown size={16} />}
-                          label={image.dislikeCount}
+                    <Chip
+                      icon={<ThumbDownAltOutlinedIcon fontSize="small" />}
+                      label={image.dislikeCount}
                           variant={image.viewerReaction === "dislike" ? "filled" : "outlined"}
                           color="primary"
                           clickable={!isAuthenticated}
@@ -1470,6 +1735,7 @@ export default function App({ defaultThemeColors }: AppProps) {
             </Stack>
           )}
         </Stack>
+        )}
       </Container>
 
       <Popover
@@ -1999,10 +2265,9 @@ export default function App({ defaultThemeColors }: AppProps) {
                         <Typography variant="body2" color="text.secondary">
                           {colorField.helperText}
                         </Typography>
-                        <Box
-                          component="input"
+                        <TextField
+                          label={`${colorField.label} picker`}
                           type="color"
-                          aria-label={`Pick ${colorField.label.toLowerCase()}`}
                           value={
                             HEX_COLOR_PATTERN.test(colorField.value)
                               ? colorField.value
@@ -2011,12 +2276,20 @@ export default function App({ defaultThemeColors }: AppProps) {
                           onChange={(event: ChangeEvent<HTMLInputElement>) => {
                             handleThemeColorChange(colorField.key, event.target.value);
                           }}
+                          fullWidth
+                          slotProps={{
+                            inputLabel: {
+                              shrink: true,
+                            },
+                            htmlInput: {
+                              "aria-label": `Pick ${colorField.label.toLowerCase()}`,
+                            },
+                          }}
                           sx={{
-                            width: "100%",
-                            minHeight: 76,
-                            border: 0,
-                            background: "transparent",
-                            cursor: "pointer",
+                            "& input": {
+                              minHeight: 56,
+                              cursor: "pointer",
+                            },
                           }}
                         />
                         <TextField
@@ -2076,7 +2349,7 @@ export default function App({ defaultThemeColors }: AppProps) {
                       ))}
                     </Stack>
                     <Stack spacing={1.25}>
-                      <Typography variant="h6">Jayden Gallery</Typography>
+                      <Typography variant="h6">Jayden&apos;s AI</Typography>
                       <Button variant="contained" size="small" sx={{ alignSelf: "flex-start" }}>
                         Preview Button
                       </Button>

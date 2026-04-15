@@ -5,3 +5,5 @@ When working on Convex code, **always read `convex/_generated/ai/guidelines.md` 
 
 Convex agent skills for common tasks can be installed by running `npx convex ai-files install`.
 <!-- convex-ai-end -->
+
+For frontend work in this repository, use the local skill at `.agents/skills/frontend-design/SKILL.md` as the default design guide. Prefer Material UI-first implementation and avoid generic UI patterns.
