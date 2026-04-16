@@ -34,6 +34,7 @@ import { alpha, darken, lighten, useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
+import type { ICity, ICountry } from "country-state-city";
 
 type UploadResult = {
   storageId: Id<"_storage">;
@@ -48,6 +49,13 @@ type ThemeColors = {
 
 type AppProps = {
   defaultThemeColors: ThemeColors;
+};
+
+type CountryStateCityModule = typeof import("country-state-city");
+
+type LocationOption = {
+  code: string;
+  name: string;
 };
 
 type AppRoute = "/" | "/ai" | "/art";
@@ -73,6 +81,7 @@ const normalizeAppPath = (pathname: string): AppRoute => {
 
 const normalizeHexColor = (value: string) => value.trim().toUpperCase();
 const normalizeCategoryValue = (value: string) => value.trim();
+const sortByName = (left: LocationOption, right: LocationOption) => left.name.localeCompare(right.name);
 const mimeTypeToExtension = (mimeType: string) => {
   const subtype = mimeType.split("/")[1] ?? "png";
 
@@ -86,6 +95,16 @@ const mimeTypeToExtension = (mimeType: string) => {
 
   return subtype;
 };
+
+const mapCountryOption = (country: ICountry): LocationOption => ({
+  code: country.isoCode,
+  name: country.name,
+});
+
+const mapCityOption = (city: ICity): LocationOption => ({
+  code: `${city.countryCode}-${city.stateCode}-${city.name}`,
+  name: city.name,
+});
 
 const formatFileSize = (bytes: number) => {
   if (bytes < 1024) {
@@ -299,7 +318,6 @@ export default function App({ defaultThemeColors }: AppProps) {
   const createImageEntry = useMutation(api.gallery.createImageEntry);
   const updateImageEntry = useMutation(api.gallery.updateImageEntry);
   const replaceImageFile = useMutation(api.gallery.replaceImageFile);
-  const deleteImageEntry = useMutation(api.gallery.deleteImageEntry);
   const saveThemeSettings = useMutation(api.gallery.saveThemeSettings);
   const addImageComment = useMutation(api.gallery.addImageComment);
   const setImageReaction = useMutation(api.gallery.setImageReaction);
@@ -315,11 +333,16 @@ export default function App({ defaultThemeColors }: AppProps) {
   const [editTitle, setEditTitle] = useState("");
   const [editCaption, setEditCaption] = useState("");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
-  const [isDeletingImage, setIsDeletingImage] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("");
   const [title, setTitle] = useState("");
   const [caption, setCaption] = useState("");
+  const [selectedCountry, setSelectedCountry] = useState<LocationOption | null>(null);
+  const [selectedCity, setSelectedCity] = useState<LocationOption | null>(null);
+  const [streetAddress, setStreetAddress] = useState("");
   const [editCategory, setEditCategory] = useState("");
+  const [editCountry, setEditCountry] = useState<LocationOption | null>(null);
+  const [editCity, setEditCity] = useState<LocationOption | null>(null);
+  const [editStreetAddress, setEditStreetAddress] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [replacementFile, setReplacementFile] = useState<File | null>(null);
@@ -336,6 +359,10 @@ export default function App({ defaultThemeColors }: AppProps) {
   const [textColorInput, setTextColorInput] = useState(defaultThemeColors.textColor);
   const [themeErrorMessage, setThemeErrorMessage] = useState("");
   const [isSavingTheme, setIsSavingTheme] = useState(false);
+  const [locationModule, setLocationModule] = useState<CountryStateCityModule | null>(null);
+  const [countryOptions, setCountryOptions] = useState<LocationOption[]>([]);
+  const [countryFilter, setCountryFilter] = useState<string | null>(null);
+  const [cityFilter, setCityFilter] = useState<string | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState<number | null>(null);
   const [commentAuthorName, setCommentAuthorName] = useState("");
   const [commentBody, setCommentBody] = useState("");
@@ -386,11 +413,99 @@ export default function App({ defaultThemeColors }: AppProps) {
     };
   }, [replacementFile]);
 
+  useEffect(() => {
+    if (activeSurface !== "ai" && !isDialogOpen && !editingImageId) {
+      return;
+    }
+
+    if (locationModule) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void import("country-state-city").then((module) => {
+      if (cancelled) {
+        return;
+      }
+
+      setLocationModule(module);
+      setCountryOptions(module.Country.getAllCountries().map(mapCountryOption).sort(sortByName));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSurface, editingImageId, isDialogOpen, locationModule]);
+
+  const cityOptions = useMemo(() => {
+    if (!selectedCountry || !locationModule) {
+      return [];
+    }
+
+    const uniqueCities = new Map<string, LocationOption>();
+
+    for (const city of locationModule.City.getCitiesOfCountry(selectedCountry.code) ?? []) {
+      const key = city.name.trim().toLowerCase();
+
+      if (!key || uniqueCities.has(key)) {
+        continue;
+      }
+
+      uniqueCities.set(key, mapCityOption(city));
+    }
+
+    return Array.from(uniqueCities.values()).sort(sortByName);
+  }, [locationModule, selectedCountry]);
+  const editCityOptions = useMemo(() => {
+    if (!editCountry || !locationModule) {
+      return [];
+    }
+
+    const uniqueCities = new Map<string, LocationOption>();
+
+    for (const city of locationModule.City.getCitiesOfCountry(editCountry.code) ?? []) {
+      const key = city.name.trim().toLowerCase();
+
+      if (!key || uniqueCities.has(key)) {
+        continue;
+      }
+
+      uniqueCities.set(key, mapCityOption(city));
+    }
+
+    return Array.from(uniqueCities.values()).sort(sortByName);
+  }, [editCountry, locationModule]);
+
+  useEffect(() => {
+    if (selectedCity && !cityOptions.some((cityOption) => cityOption.name === selectedCity.name)) {
+      setSelectedCity(null);
+    }
+  }, [cityOptions, selectedCity]);
+
+  useEffect(() => {
+    if (!editCity) {
+      return;
+    }
+
+    const matchingCity = editCityOptions.find((cityOption) => cityOption.name === editCity.name);
+
+    if (!matchingCity) {
+      setEditCity(null);
+      return;
+    }
+
+    if (matchingCity.code !== editCity.code) {
+      setEditCity(matchingCity);
+    }
+  }, [editCity, editCityOptions]);
+
   const isFormValid = Boolean(
     selectedCategory.trim() !== "" &&
     title.trim() !== "" &&
       caption.trim() !== "" &&
-      selectedFile,
+      selectedFile &&
+      (activeSurface === "art" || (selectedCountry?.name && selectedCity?.name)),
   );
   const helperText = useMemo(() => {
     if (selectedFile) {
@@ -415,11 +530,44 @@ export default function App({ defaultThemeColors }: AppProps) {
   const isEditFormValid = Boolean(
     editCategory.trim() !== "" &&
     editTitle.trim() !== "" &&
-      editCaption.trim() !== "",
+      editCaption.trim() !== "" &&
+      (activeSurface === "art" || (editCountry?.name && editCity?.name)),
   );
   const isAuthenticated = authState?.isAuthenticated ?? false;
   const categoryOptions = useMemo(() => categories ?? [], [categories]);
-  const filteredImages = useMemo(() => images ?? [], [images]);
+  const filteredImages = useMemo(() => {
+    const allImages = images ?? [];
+
+    if (activeSurface !== "ai") {
+      return allImages;
+    }
+
+    return allImages.filter((image) => {
+      const matchesCountry = !countryFilter || image.country === countryFilter;
+      const matchesCity = !cityFilter || image.city === cityFilter;
+
+      return matchesCountry && matchesCity;
+    });
+  }, [activeSurface, cityFilter, countryFilter, images]);
+  const countryFilterOptions = useMemo(
+    () =>
+      Array.from(new Set((images ?? []).map((image) => image.country).filter(Boolean))).sort((left, right) =>
+        left.localeCompare(right),
+      ),
+    [images],
+  );
+  const cityFilterOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          (images ?? [])
+            .filter((image) => !countryFilter || image.country === countryFilter)
+            .map((image) => image.city)
+            .filter(Boolean),
+        ),
+      ).sort((left, right) => left.localeCompare(right)),
+    [countryFilter, images],
+  );
   const editingImage = useMemo(
     () => filteredImages.find((image) => image._id === editingImageId) ?? null,
     [editingImageId, filteredImages],
@@ -485,6 +633,9 @@ export default function App({ defaultThemeColors }: AppProps) {
     setSelectedCategory("");
     setTitle("");
     setCaption("");
+    setSelectedCountry(null);
+    setSelectedCity(null);
+    setStreetAddress("");
     setSelectedFile(null);
     setPreviewUrl(null);
     setIsDragActive(false);
@@ -515,16 +666,18 @@ export default function App({ defaultThemeColors }: AppProps) {
   };
 
   const handleEditDialogClose = () => {
-    if (isSavingEdit || isDeletingImage) {
+    if (isSavingEdit) {
       return;
     }
 
     setIsSavingEdit(false);
-    setIsDeletingImage(false);
     setEditingImageId(null);
     setEditCategory("");
     setEditTitle("");
     setEditCaption("");
+    setEditCountry(null);
+    setEditCity(null);
+    setEditStreetAddress("");
     setReplacementFile(null);
     setReplacementPreviewUrl(null);
     setEditErrorMessage("");
@@ -577,10 +730,17 @@ export default function App({ defaultThemeColors }: AppProps) {
   };
 
   const handleEditOpen = (image: NonNullable<typeof images>[number]) => {
+    const matchingCountry =
+      countryOptions.find((countryOption) => countryOption.name === image.country) ??
+      (image.country ? { code: image.country, name: image.country } : null);
+
     setEditingImageId(image._id);
     setEditCategory(image.category ?? "");
     setEditTitle(image.title);
     setEditCaption(image.caption);
+    setEditCountry(matchingCountry);
+    setEditCity(image.city ? { code: image.city, name: image.city } : null);
+    setEditStreetAddress(image.streetAddress ?? "");
     setReplacementFile(null);
     setReplacementPreviewUrl(null);
     setEditErrorMessage("");
@@ -822,8 +982,16 @@ export default function App({ defaultThemeColors }: AppProps) {
       return;
     }
 
-    if (!title.trim() || !caption.trim()) {
-      setErrorMessage("Please add a category, title, and caption.");
+    if (
+      !title.trim() ||
+      !caption.trim() ||
+      (activeSurface === "ai" && (!selectedCountry?.name || !selectedCity?.name))
+    ) {
+      setErrorMessage(
+        activeSurface === "ai"
+          ? "Please add a category, title, caption, country, and city."
+          : "Please add a category, title, and caption.",
+      );
       return;
     }
 
@@ -853,6 +1021,9 @@ export default function App({ defaultThemeColors }: AppProps) {
         category: normalizeCategoryValue(selectedCategory),
         title,
         caption,
+        country: activeSurface === "ai" ? selectedCountry?.name : undefined,
+        city: activeSurface === "ai" ? selectedCity?.name : undefined,
+        streetAddress: activeSurface === "ai" ? streetAddress.trim() || undefined : undefined,
       });
 
       setIsDialogOpen(false);
@@ -877,8 +1048,17 @@ export default function App({ defaultThemeColors }: AppProps) {
       return;
     }
 
-    if (!editCategory.trim() || !editTitle.trim() || !editCaption.trim()) {
-      setEditErrorMessage("Please update the category, title, and caption.");
+    if (
+      !editCategory.trim() ||
+      !editTitle.trim() ||
+      !editCaption.trim() ||
+      (activeSurface === "ai" && (!editCountry?.name || !editCity?.name))
+    ) {
+      setEditErrorMessage(
+        activeSurface === "ai"
+          ? "Please update the category, title, caption, country, and city."
+          : "Please update the category, title, and caption.",
+      );
       return;
     }
 
@@ -917,6 +1097,9 @@ export default function App({ defaultThemeColors }: AppProps) {
         category: normalizeCategoryValue(editCategory),
         title: editTitle,
         caption: editCaption,
+        country: activeSurface === "ai" ? editCountry?.name : undefined,
+        city: activeSurface === "ai" ? editCity?.name : undefined,
+        streetAddress: activeSurface === "ai" ? editStreetAddress.trim() || undefined : undefined,
       });
 
       setIsSavingEdit(false);
@@ -924,6 +1107,9 @@ export default function App({ defaultThemeColors }: AppProps) {
       setEditCategory("");
       setEditTitle("");
       setEditCaption("");
+      setEditCountry(null);
+      setEditCity(null);
+      setEditStreetAddress("");
       setReplacementFile(null);
       setReplacementPreviewUrl(null);
       setEditErrorMessage("");
@@ -932,49 +1118,6 @@ export default function App({ defaultThemeColors }: AppProps) {
         handleProtectedActionError(error, "Something went wrong while saving your changes."),
       );
       setIsSavingEdit(false);
-    }
-  };
-
-  const handleDeleteImage = async () => {
-    let activeSessionToken: string;
-
-    try {
-      activeSessionToken = requireSessionToken();
-    } catch (error) {
-      setEditErrorMessage(handleProtectedActionError(error, "Please log in to continue."));
-      return;
-    }
-
-    if (!editingImageId) {
-      return;
-    }
-
-    const confirmed =
-      typeof window === "undefined"
-        ? true
-        : window.confirm("Delete this photo permanently? This will also remove its comments and reactions.");
-
-    if (!confirmed) {
-      return;
-    }
-
-    setIsDeletingImage(true);
-    setEditErrorMessage("");
-
-    try {
-      await deleteImageEntry({
-        sessionToken: activeSessionToken,
-        surface: activeSurface,
-        imageId: editingImageId,
-      });
-
-      setIsDeletingImage(false);
-      handleEditDialogClose();
-    } catch (error) {
-      setEditErrorMessage(
-        handleProtectedActionError(error, "Something went wrong while deleting this photo."),
-      );
-      setIsDeletingImage(false);
     }
   };
 
@@ -1037,6 +1180,12 @@ export default function App({ defaultThemeColors }: AppProps) {
       setSessionToken(null);
     }
   }, [authState, sessionToken]);
+
+  useEffect(() => {
+    if (cityFilter && !cityFilterOptions.includes(cityFilter)) {
+      setCityFilter(null);
+    }
+  }, [cityFilter, cityFilterOptions]);
 
   useEffect(() => {
     if (!filteredImages.length) {
@@ -1620,11 +1769,13 @@ export default function App({ defaultThemeColors }: AppProps) {
                     boxShadow: `inset 0 0 0 1px ${alpha("#ffffff", 0.42)}`,
                   }}
                 >
-                  <Tabs
-                    value={selectedCategoryFilter ?? "__all__"}
-                    onChange={(_, value: string) => {
-                      setSelectedCategoryFilter(value === "__all__" ? null : value);
-                    }}
+                    <Tabs
+                      value={selectedCategoryFilter ?? "__all__"}
+                      onChange={(_, value: string) => {
+                        setSelectedCategoryFilter(value === "__all__" ? null : value);
+                        setCountryFilter(null);
+                        setCityFilter(null);
+                      }}
                     variant="scrollable"
                     scrollButtons="auto"
                     aria-label="Gallery categories"
@@ -1652,6 +1803,94 @@ export default function App({ defaultThemeColors }: AppProps) {
                   </Tabs>
                 </Box>
               </Stack>
+              {activeSurface === "ai" ? (
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: 2.5,
+                    border: `1px solid ${alpha(theme.palette.primary.dark, 0.14)}`,
+                    backgroundColor: alpha("#ffffff", 0.62),
+                    boxShadow: `inset 0 0 0 1px ${alpha("#ffffff", 0.42)}`,
+                  }}
+                >
+                  <Stack spacing={2}>
+                    <Stack
+                      direction={{ xs: "column", sm: "row" }}
+                      spacing={1.5}
+                      sx={{ alignItems: { sm: "center" }, justifyContent: "space-between" }}
+                    >
+                      <Box>
+                        <Typography variant="h6">Filter Gallery</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Narrow Jayden&apos;s AI by country or city.
+                        </Typography>
+                      </Box>
+                      {countryFilter || cityFilter ? (
+                        <Button
+                          variant="text"
+                          onClick={() => {
+                            setCountryFilter(null);
+                            setCityFilter(null);
+                          }}
+                        >
+                          Clear
+                        </Button>
+                      ) : null}
+                    </Stack>
+                    <Stack spacing={1}>
+                      <Typography variant="overline" sx={{ color: "primary.dark", fontWeight: 700 }}>
+                        Countries
+                      </Typography>
+                      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: "wrap" }}>
+                        {countryFilterOptions.map((country) => (
+                          <Chip
+                            key={country}
+                            label={country}
+                            clickable
+                            color={countryFilter === country ? "primary" : "default"}
+                            variant={countryFilter === country ? "filled" : "outlined"}
+                            onClick={() => {
+                              setCountryFilter((currentCountry) =>
+                                currentCountry === country ? null : country,
+                              );
+                              setCityFilter(null);
+                            }}
+                          />
+                        ))}
+                        {countryFilterOptions.length === 0 ? (
+                          <Typography variant="body2" color="text.secondary">
+                            Country filters will appear after AI images with locations are added.
+                          </Typography>
+                        ) : null}
+                      </Stack>
+                    </Stack>
+                    <Stack spacing={1}>
+                      <Typography variant="overline" sx={{ color: "primary.dark", fontWeight: 700 }}>
+                        Cities
+                      </Typography>
+                      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: "wrap" }}>
+                        {cityFilterOptions.map((city) => (
+                          <Chip
+                            key={city}
+                            label={city}
+                            clickable
+                            color={cityFilter === city ? "primary" : "default"}
+                            variant={cityFilter === city ? "filled" : "outlined"}
+                            onClick={() => {
+                              setCityFilter((currentCity) => (currentCity === city ? null : city));
+                            }}
+                          />
+                        ))}
+                        {cityFilterOptions.length === 0 ? (
+                          <Typography variant="body2" color="text.secondary">
+                            Pick a country to narrow the city list.
+                          </Typography>
+                        ) : null}
+                      </Stack>
+                    </Stack>
+                  </Stack>
+                </Paper>
+              ) : null}
               <Box
                 sx={{
                   display: "grid",
@@ -2408,7 +2647,7 @@ export default function App({ defaultThemeColors }: AppProps) {
         <DialogTitle sx={{ pb: 1 }}>
           <Typography variant="h4">Edit image details</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
-            Update the title and caption, replace the photo file, or delete the photo entirely.
+            Update the details and optionally replace the photo file.
           </Typography>
         </DialogTitle>
         <DialogContent>
@@ -2466,7 +2705,7 @@ export default function App({ defaultThemeColors }: AppProps) {
                   <Button
                     variant="outlined"
                     component="label"
-                    disabled={isSavingEdit || isDeletingImage || isPastingReplacementPhoto}
+                    disabled={isSavingEdit || isPastingReplacementPhoto}
                   >
                     Select Replacement
                     <input hidden accept="image/*" type="file" onChange={handleReplacementFileChange} />
@@ -2476,7 +2715,7 @@ export default function App({ defaultThemeColors }: AppProps) {
                     onClick={() => {
                       void handlePasteReplacementButtonClick();
                     }}
-                    disabled={isSavingEdit || isDeletingImage || isPastingReplacementPhoto}
+                    disabled={isSavingEdit || isPastingReplacementPhoto}
                   >
                     {isPastingReplacementPhoto ? "Pasting..." : "Paste Replacement"}
                   </Button>
@@ -2485,7 +2724,7 @@ export default function App({ defaultThemeColors }: AppProps) {
                       variant="text"
                       color="inherit"
                       onClick={() => setReplacementFile(null)}
-                      disabled={isSavingEdit || isDeletingImage}
+                      disabled={isSavingEdit}
                     >
                       Clear Replacement
                     </Button>
@@ -2529,31 +2768,53 @@ export default function App({ defaultThemeColors }: AppProps) {
               fullWidth
               required
             />
+            {activeSurface === "ai" ? (
+              <>
+                <Autocomplete
+                  options={countryOptions}
+                  value={editCountry}
+                  isOptionEqualToValue={(option, value) => option.name === value.name}
+                  getOptionLabel={(option) => option.name}
+                  onChange={(_, value) => {
+                    setEditCountry(value);
+                    setEditCity(null);
+                  }}
+                  renderInput={(params) => <TextField {...params} label="Country" required />}
+                />
+                <Autocomplete
+                  options={editCityOptions}
+                  value={editCity}
+                  disabled={!editCountry}
+                  isOptionEqualToValue={(option, value) => option.name === value.name}
+                  getOptionLabel={(option) => option.name}
+                  onChange={(_, value) => setEditCity(value)}
+                  renderInput={(params) => <TextField {...params} label="City" required />}
+                />
+                <TextField
+                  label="Street Address"
+                  value={editStreetAddress}
+                  onChange={(event) => setEditStreetAddress(event.target.value)}
+                  fullWidth
+                  helperText="Optional"
+                />
+              </>
+            ) : null}
           </Stack>
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 3, justifyContent: "space-between" }}>
-          <Button
-            color="error"
-            onClick={() => {
-              void handleDeleteImage();
-            }}
-            disabled={isSavingEdit || isDeletingImage}
-          >
-            {isDeletingImage ? "Deleting..." : "Delete Photo"}
-          </Button>
+        <DialogActions sx={{ px: 3, pb: 3 }}>
           <Stack direction="row" spacing={1.25}>
-          <Button onClick={handleEditDialogClose} disabled={isSavingEdit || isDeletingImage}>
-            Cancel
-          </Button>
-          <Button
-            variant="contained"
-            disabled={!isEditFormValid || isSavingEdit || isDeletingImage}
-            onClick={() => {
-              void handleEditSave();
-            }}
-          >
-            {isSavingEdit ? "Saving..." : replacementFile ? "Save And Replace" : "Save Changes"}
-          </Button>
+            <Button onClick={handleEditDialogClose} disabled={isSavingEdit}>
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              disabled={!isEditFormValid || isSavingEdit}
+              onClick={() => {
+                void handleEditSave();
+              }}
+            >
+              {isSavingEdit ? "Saving..." : replacementFile ? "Save And Replace" : "Save Changes"}
+            </Button>
           </Stack>
         </DialogActions>
       </Dialog>
@@ -2728,6 +2989,37 @@ export default function App({ defaultThemeColors }: AppProps) {
               fullWidth
               required
             />
+            {activeSurface === "ai" ? (
+              <>
+                <Autocomplete
+                  options={countryOptions}
+                  value={selectedCountry}
+                  isOptionEqualToValue={(option, value) => option.name === value.name}
+                  getOptionLabel={(option) => option.name}
+                  onChange={(_, value) => {
+                    setSelectedCountry(value);
+                    setSelectedCity(null);
+                  }}
+                  renderInput={(params) => <TextField {...params} label="Country" required />}
+                />
+                <Autocomplete
+                  options={cityOptions}
+                  value={selectedCity}
+                  disabled={!selectedCountry}
+                  isOptionEqualToValue={(option, value) => option.name === value.name}
+                  getOptionLabel={(option) => option.name}
+                  onChange={(_, value) => setSelectedCity(value)}
+                  renderInput={(params) => <TextField {...params} label="City" required />}
+                />
+                <TextField
+                  label="Street Address"
+                  value={streetAddress}
+                  onChange={(event) => setStreetAddress(event.target.value)}
+                  fullWidth
+                  helperText="Optional"
+                />
+              </>
+            ) : null}
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 3 }}>
