@@ -56,6 +56,8 @@ type AppSurface = "ai" | "art";
 const HEX_COLOR_PATTERN = /^#([0-9A-F]{6})$/;
 const ADMIN_SESSION_STORAGE_KEY = "jayden-gallery-admin-session";
 const PUBLIC_VISITOR_ID_STORAGE_KEY = "jayden-gallery-public-visitor-id";
+const MAX_UPLOAD_DIMENSION = 1600;
+const WEBP_QUALITY_STEPS = [0.82, 0.74, 0.68, 0.6];
 
 const normalizeAppPath = (pathname: string): AppRoute => {
   if (pathname === "/ai") {
@@ -84,6 +86,105 @@ const mimeTypeToExtension = (mimeType: string) => {
 
   return subtype;
 };
+
+const formatFileSize = (bytes: number) => {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+
+  const kilobytes = bytes / 1024;
+
+  if (kilobytes < 1024) {
+    return `${kilobytes.toFixed(kilobytes >= 100 ? 0 : 1)} KB`;
+  }
+
+  const megabytes = kilobytes / 1024;
+  return `${megabytes.toFixed(megabytes >= 100 ? 0 : 1)} MB`;
+};
+
+const loadImageElement = (file: File) =>
+  new Promise<HTMLImageElement>((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(image);
+    };
+
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Could not read that image file."));
+    };
+
+    image.src = objectUrl;
+  });
+
+const canvasToBlob = (canvas: HTMLCanvasElement, mimeType: string, quality?: number) =>
+  new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error("Could not prepare that image for upload."));
+        return;
+      }
+
+      resolve(blob);
+    }, mimeType, quality);
+  });
+
+const compressImageFile = async (file: File) => {
+  if (!file.type.startsWith("image/")) {
+    throw new Error("Please choose an image file.");
+  }
+
+  if (file.type === "image/svg+xml" || file.type === "image/gif") {
+    return file;
+  }
+
+  const image = await loadImageElement(file);
+  const scale = Math.min(1, MAX_UPLOAD_DIMENSION / Math.max(image.width, image.height));
+  const width = Math.max(1, Math.round(image.width * scale));
+  const height = Math.max(1, Math.round(image.height * scale));
+  const canvas = document.createElement("canvas");
+
+  canvas.width = width;
+  canvas.height = height;
+
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    throw new Error("Could not prepare that image for upload.");
+  }
+
+  context.drawImage(image, 0, 0, width, height);
+
+  let optimizedBlob: Blob | null = null;
+
+  for (const quality of WEBP_QUALITY_STEPS) {
+    const candidateBlob = await canvasToBlob(canvas, "image/webp", quality);
+
+    optimizedBlob = candidateBlob;
+
+    if (
+      candidateBlob.size <= file.size * 0.9 ||
+      quality === WEBP_QUALITY_STEPS[WEBP_QUALITY_STEPS.length - 1]
+    ) {
+      break;
+    }
+  }
+
+  if (!optimizedBlob) {
+    throw new Error("Could not prepare that image for upload.");
+  }
+
+  const fileNameStem = file.name.replace(/\.[^.]+$/, "") || "image";
+
+  return new File([optimizedBlob], `${fileNameStem}.webp`, {
+    type: "image/webp",
+    lastModified: Date.now(),
+  });
+};
+
 const extractImageFileFromClipboardData = (clipboardData: DataTransfer | null) => {
   if (!clipboardData) {
     return null;
@@ -293,10 +394,10 @@ export default function App({ defaultThemeColors }: AppProps) {
   );
   const helperText = useMemo(() => {
     if (selectedFile) {
-      return `Selected image: ${selectedFile.name}`;
+      return `Selected image: ${selectedFile.name} (${formatFileSize(selectedFile.size)})`;
     }
 
-    return "Choose an image file to add to the gallery.";
+    return "Choose an image file to add to the gallery. Photos are resized and compressed before upload.";
   }, [selectedFile]);
   const currentThemeColors = defaultThemeColors;
   const previewBrandColor = HEX_COLOR_PATTERN.test(brandColorInput)
@@ -429,7 +530,7 @@ export default function App({ defaultThemeColors }: AppProps) {
     setEditErrorMessage("");
   };
 
-  const handleSelectedFile = (file: File | null) => {
+  const handleSelectedFile = async (file: File | null) => {
     if (!file) {
       setSelectedFile(null);
       return;
@@ -440,11 +541,19 @@ export default function App({ defaultThemeColors }: AppProps) {
       return;
     }
 
-    setSelectedFile(file);
-    setErrorMessage("");
+    try {
+      const optimizedFile = await compressImageFile(file);
+      setSelectedFile(optimizedFile);
+      setErrorMessage("");
+    } catch (error) {
+      setSelectedFile(null);
+      setErrorMessage(
+        error instanceof Error ? error.message : "That image could not be prepared for upload.",
+      );
+    }
   };
 
-  const handleReplacementFile = (file: File | null) => {
+  const handleReplacementFile = async (file: File | null) => {
     if (!file) {
       setReplacementFile(null);
       return;
@@ -455,8 +564,16 @@ export default function App({ defaultThemeColors }: AppProps) {
       return;
     }
 
-    setReplacementFile(file);
-    setEditErrorMessage("");
+    try {
+      const optimizedFile = await compressImageFile(file);
+      setReplacementFile(optimizedFile);
+      setEditErrorMessage("");
+    } catch (error) {
+      setReplacementFile(null);
+      setEditErrorMessage(
+        error instanceof Error ? error.message : "That replacement image could not be prepared.",
+      );
+    }
   };
 
   const handleEditOpen = (image: NonNullable<typeof images>[number]) => {
@@ -501,13 +618,13 @@ export default function App({ defaultThemeColors }: AppProps) {
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
-    handleSelectedFile(file);
+    void handleSelectedFile(file);
     event.target.value = "";
   };
 
   const handleReplacementFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
-    handleReplacementFile(file);
+    void handleReplacementFile(file);
     event.target.value = "";
   };
 
@@ -525,7 +642,7 @@ export default function App({ defaultThemeColors }: AppProps) {
     event.preventDefault();
     setIsDragActive(false);
     const file = event.dataTransfer.files?.[0] ?? null;
-    handleSelectedFile(file);
+    void handleSelectedFile(file);
   };
 
   const handlePaste = (event: ClipboardEvent<HTMLDivElement>) => {
@@ -536,7 +653,7 @@ export default function App({ defaultThemeColors }: AppProps) {
     }
 
     event.preventDefault();
-    handleSelectedFile(file);
+    void handleSelectedFile(file);
   };
 
   const handlePasteButtonClick = async () => {
@@ -564,7 +681,7 @@ export default function App({ defaultThemeColors }: AppProps) {
           lastModified: Date.now(),
         });
 
-        handleSelectedFile(file);
+        await handleSelectedFile(file);
         return;
       }
 
@@ -605,7 +722,7 @@ export default function App({ defaultThemeColors }: AppProps) {
           lastModified: Date.now(),
         });
 
-        handleReplacementFile(file);
+        await handleReplacementFile(file);
         return;
       }
 
@@ -1573,6 +1690,8 @@ export default function App({ defaultThemeColors }: AppProps) {
                           component="img"
                           image={image.imageUrl}
                           alt={image.title}
+                          loading="lazy"
+                          decoding="async"
                           sx={{ height: 260, objectFit: "cover" }}
                         />
                       ) : (
@@ -1836,6 +1955,8 @@ export default function App({ defaultThemeColors }: AppProps) {
                       component="img"
                       src={activeImage.imageUrl}
                       alt={activeImage.title}
+                      loading="eager"
+                      decoding="async"
                       sx={{
                         width: "100%",
                         maxHeight: { xs: "70vh", md: "75vh" },
@@ -2333,6 +2454,8 @@ export default function App({ defaultThemeColors }: AppProps) {
                       component="img"
                       src={editingImage.imageUrl}
                       alt={editingImage.title}
+                      loading="lazy"
+                      decoding="async"
                       sx={{ width: "100%", maxHeight: 260, objectFit: "cover" }}
                     />
                   ) : (
