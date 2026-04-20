@@ -1769,16 +1769,16 @@ export default function App({ defaultThemeColors }: AppProps) {
                     boxShadow: `inset 0 0 0 1px ${alpha("#ffffff", 0.42)}`,
                   }}
                 >
-                    <Tabs
-                      value={selectedCategoryFilter ?? "__all__"}
-                      onChange={(_, value: string) => {
-                        setSelectedCategoryFilter(value === "__all__" ? null : value);
-                        setCountryFilter(null);
-                        setCityFilter(null);
-                      }}
-                    variant="scrollable"
-                    scrollButtons="auto"
-                    aria-label="Gallery categories"
+	                    <Tabs
+	                      value={selectedCategoryFilter ?? "__all__"}
+	                      onChange={(_, value: string) => {
+	                        setSelectedCategoryFilter(value === "__all__" ? null : value);
+	                        setCountryFilter(null);
+	                        setCityFilter(null);
+	                      }}
+	                      variant="scrollable"
+	                    scrollButtons="auto"
+	                    aria-label="Gallery categories"
                     sx={{
                       minHeight: 0,
                       "& .MuiTabs-indicator": {
@@ -1814,83 +1814,63 @@ export default function App({ defaultThemeColors }: AppProps) {
                   }}
                 >
                   <Stack spacing={2}>
-                    <Stack
-                      direction={{ xs: "column", sm: "row" }}
-                      spacing={1.5}
-                      sx={{ alignItems: { sm: "center" }, justifyContent: "space-between" }}
-                    >
-                      <Box>
-                        <Typography variant="h6">Filter Gallery</Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Narrow Jayden&apos;s AI by country or city.
-                        </Typography>
-                      </Box>
-                      {countryFilter || cityFilter ? (
-                        <Button
-                          variant="text"
-                          onClick={() => {
-                            setCountryFilter(null);
-                            setCityFilter(null);
-                          }}
-                        >
-                          Clear
-                        </Button>
-                      ) : null}
-                    </Stack>
-                    <Stack spacing={1}>
-                      <Typography variant="overline" sx={{ color: "primary.dark", fontWeight: 700 }}>
-                        Countries
-                      </Typography>
-                      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: "wrap" }}>
-                        {countryFilterOptions.map((country) => (
-                          <Chip
-                            key={country}
-                            label={country}
-                            clickable
-                            color={countryFilter === country ? "primary" : "default"}
-                            variant={countryFilter === country ? "filled" : "outlined"}
-                            onClick={() => {
-                              setCountryFilter((currentCountry) =>
-                                currentCountry === country ? null : country,
-                              );
-                              setCityFilter(null);
-                            }}
-                          />
-                        ))}
-                        {countryFilterOptions.length === 0 ? (
-                          <Typography variant="body2" color="text.secondary">
-                            Country filters will appear after AI images with locations are added.
-                          </Typography>
-                        ) : null}
-                      </Stack>
-                    </Stack>
-                    <Stack spacing={1}>
-                      <Typography variant="overline" sx={{ color: "primary.dark", fontWeight: 700 }}>
-                        Cities
-                      </Typography>
-                      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: "wrap" }}>
-                        {cityFilterOptions.map((city) => (
-                          <Chip
-                            key={city}
-                            label={city}
-                            clickable
-                            color={cityFilter === city ? "primary" : "default"}
-                            variant={cityFilter === city ? "filled" : "outlined"}
-                            onClick={() => {
-                              setCityFilter((currentCity) => (currentCity === city ? null : city));
-                            }}
-                          />
-                        ))}
-                        {cityFilterOptions.length === 0 ? (
-                          <Typography variant="body2" color="text.secondary">
-                            Pick a country to narrow the city list.
-                          </Typography>
-                        ) : null}
-                      </Stack>
-                    </Stack>
-                  </Stack>
-                </Paper>
-              ) : null}
+	                    <Stack
+	                      direction={{ xs: "column", sm: "row" }}
+	                      spacing={1.5}
+	                      sx={{ alignItems: { sm: "center" }, justifyContent: "space-between" }}
+	                    >
+	                      <Box>
+	                        <Typography variant="h6">Filter Gallery</Typography>
+	                        <Typography variant="body2" color="text.secondary">
+	                          Narrow Jayden&apos;s AI by country and city while keeping each image&apos;s address visible.
+	                        </Typography>
+	                      </Box>
+	                    </Stack>
+	                    <Stack direction={{ xs: "column", md: "row" }} spacing={1.5}>
+	                      <Autocomplete
+	                        options={countryFilterOptions}
+	                        value={countryFilter}
+	                        onChange={(_, value) => {
+	                          setCountryFilter(value);
+	                          setCityFilter(null);
+	                        }}
+	                        fullWidth
+	                        renderInput={(params) => (
+	                          <TextField
+	                            {...params}
+	                            label="Country"
+	                            helperText={
+	                              countryFilterOptions.length
+	                                ? "Choose a country to narrow the gallery."
+	                                : "Country filters will appear after AI images with locations are added."
+	                            }
+	                          />
+	                        )}
+	                      />
+	                      <Autocomplete
+	                        options={cityFilterOptions}
+	                        value={cityFilter}
+	                        onChange={(_, value) => setCityFilter(value)}
+	                        disabled={!countryFilter}
+	                        fullWidth
+	                        renderInput={(params) => (
+	                          <TextField
+	                            {...params}
+	                            label="City"
+	                            helperText={
+	                              countryFilter
+	                                ? cityFilterOptions.length
+	                                  ? "Choose a city within the selected country."
+	                                  : "No cities are available for that country yet."
+	                                : "Pick a country first to narrow the city list."
+	                            }
+	                          />
+	                        )}
+	                      />
+	                    </Stack>
+	                  </Stack>
+	                </Paper>
+	              ) : null}
               <Box
                 sx={{
                   display: "grid",
