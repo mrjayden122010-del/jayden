@@ -66,6 +66,7 @@ const ADMIN_SESSION_STORAGE_KEY = "jayden-gallery-admin-session";
 const PUBLIC_VISITOR_ID_STORAGE_KEY = "jayden-gallery-public-visitor-id";
 const MAX_UPLOAD_DIMENSION = 1600;
 const WEBP_QUALITY_STEPS = [0.82, 0.74, 0.68, 0.6];
+const CATEGORY_INITIAL_FILTERS = ["All", ...Array.from({ length: 26 }, (_, index) => String.fromCharCode(65 + index))];
 
 const normalizeAppPath = (pathname: string): AppRoute => {
   if (pathname === "/ai") {
@@ -82,6 +83,10 @@ const normalizeAppPath = (pathname: string): AppRoute => {
 const normalizeHexColor = (value: string) => value.trim().toUpperCase();
 const normalizeCategoryValue = (value: string) => value.trim();
 const sortByName = (left: LocationOption, right: LocationOption) => left.name.localeCompare(right.name);
+const getCategoryInitial = (value: string) => {
+  const match = value.trim().match(/[A-Za-z]/);
+  return match ? match[0].toUpperCase() : null;
+};
 const mimeTypeToExtension = (mimeType: string) => {
   const subtype = mimeType.split("/")[1] ?? "png";
 
@@ -275,6 +280,7 @@ export default function App({ defaultThemeColors }: AppProps) {
   });
   const activeSurface: AppSurface = currentRoute === "/art" ? "art" : "ai";
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string | null>(null);
+  const [selectedCategoryInitial, setSelectedCategoryInitial] = useState<string>("All");
   const [visitorId] = useState<string | null>(() => {
     if (typeof window === "undefined") {
       return null;
@@ -535,6 +541,22 @@ export default function App({ defaultThemeColors }: AppProps) {
   );
   const isAuthenticated = authState?.isAuthenticated ?? false;
   const categoryOptions = useMemo(() => categories ?? [], [categories]);
+  const availableCategoryInitials = useMemo(
+    () =>
+      new Set(
+        categoryOptions
+          .map((category) => getCategoryInitial(category))
+          .filter((categoryInitial): categoryInitial is string => categoryInitial !== null),
+      ),
+    [categoryOptions],
+  );
+  const filteredCategoryOptions = useMemo(() => {
+    if (selectedCategoryInitial === "All") {
+      return categoryOptions;
+    }
+
+    return categoryOptions.filter((category) => getCategoryInitial(category) === selectedCategoryInitial);
+  }, [categoryOptions, selectedCategoryInitial]);
   const filteredImages = useMemo(() => {
     const allImages = images ?? [];
 
@@ -573,8 +595,8 @@ export default function App({ defaultThemeColors }: AppProps) {
     [editingImageId, filteredImages],
   );
   const categoryTabs = useMemo(
-    () => [{ label: "All", value: "__all__" }, ...categoryOptions.map((category) => ({ label: category, value: category }))],
-    [categoryOptions],
+    () => [{ label: "All", value: "__all__" }, ...filteredCategoryOptions.map((category) => ({ label: category, value: category }))],
+    [filteredCategoryOptions],
   );
 
   const clearSession = () => {
@@ -1188,6 +1210,18 @@ export default function App({ defaultThemeColors }: AppProps) {
   }, [cityFilter, cityFilterOptions]);
 
   useEffect(() => {
+    if (selectedCategoryInitial !== "All" && !availableCategoryInitials.has(selectedCategoryInitial)) {
+      setSelectedCategoryInitial("All");
+    }
+  }, [availableCategoryInitials, selectedCategoryInitial]);
+
+  useEffect(() => {
+    if (selectedCategoryFilter && !filteredCategoryOptions.includes(selectedCategoryFilter)) {
+      setSelectedCategoryFilter(null);
+    }
+  }, [filteredCategoryOptions, selectedCategoryFilter]);
+
+  useEffect(() => {
     if (!filteredImages.length) {
       setActiveImageIndex(null);
       return;
@@ -1756,10 +1790,44 @@ export default function App({ defaultThemeColors }: AppProps) {
           ) : (
             <Stack spacing={2.5}>
               <Stack
-                direction={{ xs: "column", lg: "row" }}
+                direction="column"
                 spacing={2}
-                sx={{ alignItems: { lg: "center" }, justifyContent: "space-between" }}
+                sx={{ alignItems: "stretch" }}
               >
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  useFlexGap
+                  sx={{ flexWrap: "wrap", width: "100%" }}
+                >
+                  {CATEGORY_INITIAL_FILTERS.map((categoryInitial) => {
+                    const isAllOption = categoryInitial === "All";
+                    const isAvailable = isAllOption || availableCategoryInitials.has(categoryInitial);
+                    const isSelected = selectedCategoryInitial === categoryInitial;
+
+                    return (
+                      <Chip
+                        key={categoryInitial}
+                        label={categoryInitial}
+                        clickable={isAvailable}
+                        color={isSelected ? "primary" : "default"}
+                        disabled={!isAvailable}
+                        onClick={() => {
+                          setSelectedCategoryInitial(categoryInitial);
+                          setSelectedCategoryFilter(null);
+                          setCountryFilter(null);
+                          setCityFilter(null);
+                        }}
+                        variant={isSelected ? "filled" : "outlined"}
+                        sx={{
+                          fontWeight: 700,
+                          borderRadius: 999,
+                          opacity: isAvailable ? 1 : 0.4,
+                        }}
+                      />
+                    );
+                  })}
+                </Stack>
                 <Box
                   sx={{
                     minWidth: 0,
@@ -1770,7 +1838,11 @@ export default function App({ defaultThemeColors }: AppProps) {
                   }}
                 >
 	                    <Tabs
-	                      value={selectedCategoryFilter ?? "__all__"}
+	                      value={
+	                        selectedCategoryFilter && filteredCategoryOptions.includes(selectedCategoryFilter)
+	                          ? selectedCategoryFilter
+	                          : "__all__"
+	                      }
 	                      onChange={(_, value: string) => {
 	                        setSelectedCategoryFilter(value === "__all__" ? null : value);
 	                        setCountryFilter(null);
