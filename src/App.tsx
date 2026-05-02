@@ -83,7 +83,7 @@ const normalizeAppPath = (pathname: string): AppRoute => {
 const normalizeHexColor = (value: string) => value.trim().toUpperCase();
 const normalizeCategoryValue = (value: string) => value.trim();
 const sortByName = (left: LocationOption, right: LocationOption) => left.name.localeCompare(right.name);
-const getCategoryInitial = (value: string) => {
+const getAlphabetInitial = (value: string) => {
   const match = value.trim().match(/[A-Za-z]/);
   return match ? match[0].toUpperCase() : null;
 };
@@ -281,6 +281,7 @@ export default function App({ defaultThemeColors }: AppProps) {
   const activeSurface: AppSurface = currentRoute === "/art" ? "art" : "ai";
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string | null>(null);
   const [selectedCategoryInitial, setSelectedCategoryInitial] = useState<string>("All");
+  const isAlphabetFilterActive = selectedCategoryInitial !== "All";
   const [visitorId] = useState<string | null>(() => {
     if (typeof window === "undefined") {
       return null;
@@ -307,6 +308,16 @@ export default function App({ defaultThemeColors }: AppProps) {
   }, {
     initialNumItems: pageSize,
   });
+  const alphabetFilteredImages = useQuery(
+    api.gallery.listImages,
+    isAlphabetFilterActive
+      ? {
+          surface: activeSurface,
+          category: selectedCategoryFilter,
+          visitorId,
+        }
+      : "skip",
+  );
   const categories = useQuery(api.gallery.listCategories, {
     surface: activeSurface,
   });
@@ -541,62 +552,56 @@ export default function App({ defaultThemeColors }: AppProps) {
   );
   const isAuthenticated = authState?.isAuthenticated ?? false;
   const categoryOptions = useMemo(() => categories ?? [], [categories]);
-  const availableCategoryInitials = useMemo(
-    () =>
-      new Set(
-        categoryOptions
-          .map((category) => getCategoryInitial(category))
-          .filter((categoryInitial): categoryInitial is string => categoryInitial !== null),
-      ),
-    [categoryOptions],
+  const galleryImages = useMemo(
+    () => (isAlphabetFilterActive ? alphabetFilteredImages ?? [] : images ?? []),
+    [alphabetFilteredImages, images, isAlphabetFilterActive],
   );
-  const filteredCategoryOptions = useMemo(() => {
-    if (selectedCategoryInitial === "All") {
-      return categoryOptions;
-    }
-
-    return categoryOptions.filter((category) => getCategoryInitial(category) === selectedCategoryInitial);
-  }, [categoryOptions, selectedCategoryInitial]);
+  const isGalleryLoading = isAlphabetFilterActive ? alphabetFilteredImages === undefined : imagesStatus === "LoadingFirstPage";
   const filteredImages = useMemo(() => {
-    const allImages = images ?? [];
+    return galleryImages.filter((image) => {
+      const matchesAlphabet =
+        selectedCategoryInitial === "All" || getAlphabetInitial(image.title) === selectedCategoryInitial;
 
-    if (activeSurface !== "ai") {
-      return allImages;
-    }
+      if (!matchesAlphabet) {
+        return false;
+      }
 
-    return allImages.filter((image) => {
+      if (activeSurface !== "ai") {
+        return true;
+      }
+
       const matchesCountry = !countryFilter || image.country === countryFilter;
       const matchesCity = !cityFilter || image.city === cityFilter;
 
       return matchesCountry && matchesCity;
     });
-  }, [activeSurface, cityFilter, countryFilter, images]);
+  }, [activeSurface, cityFilter, countryFilter, galleryImages, selectedCategoryInitial]);
   const countryFilterOptions = useMemo(
     () =>
-      Array.from(new Set((images ?? []).map((image) => image.country).filter(Boolean))).sort((left, right) =>
+      Array.from(new Set(galleryImages.map((image) => image.country).filter(Boolean))).sort((left, right) =>
         left.localeCompare(right),
       ),
-    [images],
+    [galleryImages],
   );
   const cityFilterOptions = useMemo(
     () =>
       Array.from(
         new Set(
-          (images ?? [])
+          galleryImages
             .filter((image) => !countryFilter || image.country === countryFilter)
             .map((image) => image.city)
             .filter(Boolean),
         ),
       ).sort((left, right) => left.localeCompare(right)),
-    [countryFilter, images],
+    [countryFilter, galleryImages],
   );
   const editingImage = useMemo(
     () => filteredImages.find((image) => image._id === editingImageId) ?? null,
     [editingImageId, filteredImages],
   );
   const categoryTabs = useMemo(
-    () => [{ label: "All", value: "__all__" }, ...filteredCategoryOptions.map((category) => ({ label: category, value: category }))],
-    [filteredCategoryOptions],
+    () => [{ label: "All", value: "__all__" }, ...categoryOptions.map((category) => ({ label: category, value: category }))],
+    [categoryOptions],
   );
 
   const clearSession = () => {
@@ -1210,16 +1215,10 @@ export default function App({ defaultThemeColors }: AppProps) {
   }, [cityFilter, cityFilterOptions]);
 
   useEffect(() => {
-    if (selectedCategoryInitial !== "All" && !availableCategoryInitials.has(selectedCategoryInitial)) {
-      setSelectedCategoryInitial("All");
-    }
-  }, [availableCategoryInitials, selectedCategoryInitial]);
-
-  useEffect(() => {
-    if (selectedCategoryFilter && !filteredCategoryOptions.includes(selectedCategoryFilter)) {
+    if (selectedCategoryFilter && !categoryOptions.includes(selectedCategoryFilter)) {
       setSelectedCategoryFilter(null);
     }
-  }, [filteredCategoryOptions, selectedCategoryFilter]);
+  }, [categoryOptions, selectedCategoryFilter]);
 
   useEffect(() => {
     if (!filteredImages.length) {
@@ -1304,7 +1303,7 @@ export default function App({ defaultThemeColors }: AppProps) {
   useEffect(() => {
     const loadMoreTarget = loadMoreTriggerRef.current;
 
-    if (!loadMoreTarget || imagesStatus !== "CanLoadMore") {
+    if (isAlphabetFilterActive || !loadMoreTarget || imagesStatus !== "CanLoadMore") {
       return;
     }
 
@@ -1328,7 +1327,7 @@ export default function App({ defaultThemeColors }: AppProps) {
     return () => {
       observer.disconnect();
     };
-  }, [imagesStatus, loadMoreImages, pageSize, filteredImages.length]);
+  }, [imagesStatus, isAlphabetFilterActive, loadMoreImages, pageSize, filteredImages.length]);
 
   useEffect(() => {
     if (!activeImage || !shouldScrollToComments) {
@@ -1740,12 +1739,12 @@ export default function App({ defaultThemeColors }: AppProps) {
         <Stack spacing={4}>
           {heroPanel}
 
-          {imagesStatus === "LoadingFirstPage" ? (
+          {isGalleryLoading ? (
             <Stack spacing={2} sx={{ py: 10, alignItems: "center" }}>
               <CircularProgress color="primary" />
               <Typography color="text.secondary">Loading your gallery...</Typography>
             </Stack>
-          ) : images.length === 0 ? (
+          ) : galleryImages.length === 0 ? (
             <Paper
               elevation={0}
               sx={{
@@ -1780,13 +1779,13 @@ export default function App({ defaultThemeColors }: AppProps) {
                 boxShadow: `inset 0 0 0 1px ${alpha("#ffffff", 0.5)}`,
               }}
             >
-              <Typography variant="h4" gutterBottom>
-                No images match this view yet.
-              </Typography>
-              <Typography color="text.secondary">
-                Try another category tab to see more artwork.
-              </Typography>
-            </Paper>
+	              <Typography variant="h4" gutterBottom>
+	                No images match this view yet.
+	              </Typography>
+	              <Typography color="text.secondary">
+	                Try another A-Z filter or category tab to see more artwork.
+	              </Typography>
+	            </Paper>
           ) : (
             <Stack spacing={2.5}>
               <Stack
@@ -1801,28 +1800,19 @@ export default function App({ defaultThemeColors }: AppProps) {
                   sx={{ flexWrap: "wrap", width: "100%" }}
                 >
                   {CATEGORY_INITIAL_FILTERS.map((categoryInitial) => {
-                    const isAllOption = categoryInitial === "All";
-                    const isAvailable = isAllOption || availableCategoryInitials.has(categoryInitial);
                     const isSelected = selectedCategoryInitial === categoryInitial;
 
                     return (
                       <Chip
                         key={categoryInitial}
                         label={categoryInitial}
-                        clickable={isAvailable}
+                        clickable
                         color={isSelected ? "primary" : "default"}
-                        disabled={!isAvailable}
-                        onClick={() => {
-                          setSelectedCategoryInitial(categoryInitial);
-                          setSelectedCategoryFilter(null);
-                          setCountryFilter(null);
-                          setCityFilter(null);
-                        }}
+                        onClick={() => setSelectedCategoryInitial(categoryInitial)}
                         variant={isSelected ? "filled" : "outlined"}
                         sx={{
                           fontWeight: 700,
                           borderRadius: 999,
-                          opacity: isAvailable ? 1 : 0.4,
                         }}
                       />
                     );
@@ -1838,11 +1828,7 @@ export default function App({ defaultThemeColors }: AppProps) {
                   }}
                 >
 	                    <Tabs
-	                      value={
-	                        selectedCategoryFilter && filteredCategoryOptions.includes(selectedCategoryFilter)
-	                          ? selectedCategoryFilter
-	                          : "__all__"
-	                      }
+	                      value={selectedCategoryFilter ?? "__all__"}
 	                      onChange={(_, value: string) => {
 	                        setSelectedCategoryFilter(value === "__all__" ? null : value);
 	                        setCountryFilter(null);
@@ -2109,9 +2095,11 @@ export default function App({ defaultThemeColors }: AppProps) {
                   </Card>
                 ))}
               </Box>
-              <Box ref={loadMoreTriggerRef} sx={{ display: "flex", justifyContent: "center", py: 1 }}>
-                {imagesStatus === "LoadingMore" ? <CircularProgress size={28} /> : null}
-              </Box>
+              {!isAlphabetFilterActive ? (
+                <Box ref={loadMoreTriggerRef} sx={{ display: "flex", justifyContent: "center", py: 1 }}>
+                  {imagesStatus === "LoadingMore" ? <CircularProgress size={28} /> : null}
+                </Box>
+              ) : null}
             </Stack>
           )}
         </Stack>
