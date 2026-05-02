@@ -22,8 +22,9 @@ const DEFAULT_THEME_COLORS: ThemeColors = {
   brandColor: "#6B7280",
   secondaryColor: "#D97706",
   accentColor: "#0F766E",
-  textColor: "#1F2933",
+  textColor: "#000000",
 };
+const LOCKED_TEXT_COLOR = "#000000";
 
 const HEX_COLOR_PATTERN = /^#([0-9A-F]{6})$/;
 
@@ -37,7 +38,7 @@ const resolveThemeColors = (themeColors: Partial<ThemeColors> | null | undefined
   secondaryColor:
     normalizeHexColor(themeColors?.secondaryColor ?? "") ?? DEFAULT_THEME_COLORS.secondaryColor,
   accentColor: normalizeHexColor(themeColors?.accentColor ?? "") ?? DEFAULT_THEME_COLORS.accentColor,
-  textColor: normalizeHexColor(themeColors?.textColor ?? "") ?? DEFAULT_THEME_COLORS.textColor,
+  textColor: LOCKED_TEXT_COLOR,
 });
 
 const buildTheme = (themeColors: ThemeColors) => {
