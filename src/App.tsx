@@ -1766,26 +1766,6 @@ export default function App({ defaultThemeColors }: AppProps) {
                   : "Use the login button in the top right to unlock uploads, edits, and theme controls."}
               </Typography>
             </Paper>
-          ) : filteredImages.length === 0 ? (
-            <Paper
-              elevation={0}
-              sx={{
-                p: 6,
-                textAlign: "center",
-                borderStyle: "dashed",
-                borderWidth: 1.5,
-                borderColor: alpha(theme.palette.primary.dark, 0.32),
-                backgroundColor: alpha("#ffffff", 0.82),
-                boxShadow: `inset 0 0 0 1px ${alpha("#ffffff", 0.5)}`,
-              }}
-            >
-	              <Typography variant="h4" gutterBottom>
-	                No images match this view yet.
-	              </Typography>
-	              <Typography color="text.secondary">
-	                Try another A-Z filter or category tab to see more artwork.
-	              </Typography>
-	            </Paper>
           ) : (
             <Stack spacing={2.5}>
               <Stack
@@ -1929,21 +1909,43 @@ export default function App({ defaultThemeColors }: AppProps) {
 	                  </Stack>
 	                </Paper>
 	              ) : null}
-              <Box
-                sx={{
-                  display: "grid",
-                  gap: 3,
-                  gridTemplateColumns: {
-                    xs: "1fr",
-                    sm: "repeat(2, minmax(0, 1fr))",
-                    lg: "repeat(3, minmax(0, 1fr))",
-                  },
-                }}
-              >
-                {filteredImages.map((image, index) => (
-                  <Card
-                    key={image._id}
-                    elevation={0}
+              {filteredImages.length === 0 ? (
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: 6,
+                    textAlign: "center",
+                    borderStyle: "dashed",
+                    borderWidth: 1.5,
+                    borderColor: alpha(theme.palette.primary.dark, 0.32),
+                    backgroundColor: alpha("#ffffff", 0.82),
+                    boxShadow: `inset 0 0 0 1px ${alpha("#ffffff", 0.5)}`,
+                  }}
+                >
+                  <Typography variant="h4" gutterBottom>
+                    No images match this view yet.
+                  </Typography>
+                  <Typography color="text.secondary">
+                    Try another A-Z filter or category tab to see more artwork.
+                  </Typography>
+                </Paper>
+              ) : (
+                <>
+                  <Box
+                    sx={{
+                      display: "grid",
+                      gap: 3,
+                      gridTemplateColumns: {
+                        xs: "1fr",
+                        sm: "repeat(2, minmax(0, 1fr))",
+                        lg: "repeat(3, minmax(0, 1fr))",
+                      },
+                    }}
+                  >
+                    {filteredImages.map((image, index) => (
+	                  <Card
+	                    key={image._id}
+	                    elevation={0}
                     sx={{
                       display: "flex",
                       flexDirection: "column",
@@ -2093,13 +2095,15 @@ export default function App({ defaultThemeColors }: AppProps) {
                       ) : null}
                     </Stack>
                   </Card>
-                ))}
-              </Box>
-              {!isAlphabetFilterActive ? (
-                <Box ref={loadMoreTriggerRef} sx={{ display: "flex", justifyContent: "center", py: 1 }}>
-                  {imagesStatus === "LoadingMore" ? <CircularProgress size={28} /> : null}
-                </Box>
-              ) : null}
+                    ))}
+                  </Box>
+                  {!isAlphabetFilterActive ? (
+                    <Box ref={loadMoreTriggerRef} sx={{ display: "flex", justifyContent: "center", py: 1 }}>
+                      {imagesStatus === "LoadingMore" ? <CircularProgress size={28} /> : null}
+                    </Box>
+                  ) : null}
+                </>
+              )}
             </Stack>
           )}
         </Stack>
