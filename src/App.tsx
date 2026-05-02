@@ -68,6 +68,7 @@ const LOCKED_TEXT_COLOR = "#000000";
 const MAX_UPLOAD_DIMENSION = 1600;
 const WEBP_QUALITY_STEPS = [0.82, 0.74, 0.68, 0.6];
 const CATEGORY_INITIAL_FILTERS = ["All", ...Array.from({ length: 26 }, (_, index) => String.fromCharCode(65 + index))];
+const STORY_CAPTION_PREVIEW_WORD_LIMIT = 30;
 
 const normalizeAppPath = (pathname: string): AppRoute => {
   if (pathname === "/ai") {
@@ -88,6 +89,15 @@ const normalizeAppPath = (pathname: string): AppRoute => {
 const normalizeHexColor = (value: string) => value.trim().toUpperCase();
 const normalizeCategoryValue = (value: string) => value.trim();
 const sortByName = (left: LocationOption, right: LocationOption) => left.name.localeCompare(right.name);
+const createWordPreview = (value: string, wordLimit: number) => {
+  const words = value.trim().split(/\s+/).filter(Boolean);
+
+  if (words.length <= wordLimit) {
+    return value;
+  }
+
+  return `${words.slice(0, wordLimit).join(" ")}...`;
+};
 const getAlphabetInitial = (value: string) => {
   const match = value.trim().match(/[A-Za-z]/);
   return match ? match[0].toUpperCase() : null;
@@ -2017,7 +2027,9 @@ export default function App({ defaultThemeColors }: AppProps) {
                           ) : null}
                           <Typography variant="h5">{image.title}</Typography>
                           <Typography variant="body1" color="text.secondary">
-                            {image.caption}
+                            {isStoryPage
+                              ? createWordPreview(image.caption, STORY_CAPTION_PREVIEW_WORD_LIMIT)
+                              : image.caption}
                           </Typography>
                           {shouldShowLocationDetails && (image.country || image.city || image.streetAddress) ? (
                             <Chip
