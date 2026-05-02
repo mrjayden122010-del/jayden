@@ -20,7 +20,7 @@ export default defineSchema({
     .index("by_image_id_and_visitor_id", ["imageId", "visitorId"]),
   images: defineTable({
     storageId: v.id("_storage"),
-    surface: v.optional(v.union(v.literal("ai"), v.literal("art"))),
+    surface: v.optional(v.union(v.literal("ai"), v.literal("art"), v.literal("story"))),
     category: v.optional(v.string()),
     title: v.string(),
     caption: v.string(),
@@ -43,7 +43,7 @@ export default defineSchema({
     .index("by_last_seen_at", ["lastSeenAt"]),
   siteSettings: defineTable({
     key: v.string(),
-    surface: v.optional(v.union(v.literal("ai"), v.literal("art"))),
+    surface: v.optional(v.union(v.literal("ai"), v.literal("art"), v.literal("story"))),
     brandColor: v.string(),
     secondaryColor: v.optional(v.string()),
     accentColor: v.optional(v.string()),

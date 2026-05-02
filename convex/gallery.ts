@@ -14,7 +14,9 @@ const MAX_VISITOR_ID_LENGTH = 120;
 
 const normalizeHexColor = (value: string) => value.trim().toUpperCase();
 const now = () => Date.now();
-const THEME_SURFACES = ["ai", "art"] as const;
+const surfaceValidator = v.union(v.literal("ai"), v.literal("art"), v.literal("story"));
+const THEME_SURFACES = ["ai", "art", "story"] as const;
+type GallerySurface = (typeof THEME_SURFACES)[number];
 
 const countCommentsForImage = async (
   ctx: QueryCtx | MutationCtx,
@@ -88,8 +90,8 @@ const requireAdminSession = async (ctx: MutationCtx, sessionToken: string) => {
 };
 
 const assertImageMatchesSurface = (
-  image: { surface?: "ai" | "art" },
-  surface: "ai" | "art",
+  image: { surface?: GallerySurface },
+  surface: GallerySurface,
 ) => {
   if ((image.surface ?? "ai") !== surface) {
     throw new Error("This photo no longer exists in the selected gallery.");
@@ -174,7 +176,7 @@ export const generateUploadUrl = mutation({
 export const createImageEntry = mutation({
   args: {
     sessionToken: v.string(),
-    surface: v.union(v.literal("ai"), v.literal("art")),
+    surface: surfaceValidator,
     storageId: v.id("_storage"),
     category: v.string(),
     title: v.string(),
@@ -233,7 +235,7 @@ export const createImageEntry = mutation({
 export const updateImageEntry = mutation({
   args: {
     sessionToken: v.string(),
-    surface: v.union(v.literal("ai"), v.literal("art")),
+    surface: surfaceValidator,
     imageId: v.id("images"),
     category: v.string(),
     title: v.string(),
@@ -244,7 +246,7 @@ export const updateImageEntry = mutation({
   },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);
-    const existingImage = await ctx.db.get(args.imageId);
+    const existingImage = await ctx.db.get("images", args.imageId);
 
     if (!existingImage) {
       throw new Error("This photo no longer exists.");
@@ -296,13 +298,13 @@ export const updateImageEntry = mutation({
 export const replaceImageFile = mutation({
   args: {
     sessionToken: v.string(),
-    surface: v.union(v.literal("ai"), v.literal("art")),
+    surface: surfaceValidator,
     imageId: v.id("images"),
     storageId: v.id("_storage"),
   },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);
-    const existingImage = await ctx.db.get(args.imageId);
+    const existingImage = await ctx.db.get("images", args.imageId);
 
     if (!existingImage) {
       throw new Error("This photo no longer exists.");
@@ -325,12 +327,12 @@ export const replaceImageFile = mutation({
 export const deleteImageEntry = mutation({
   args: {
     sessionToken: v.string(),
-    surface: v.union(v.literal("ai"), v.literal("art")),
+    surface: surfaceValidator,
     imageId: v.id("images"),
   },
   handler: async (ctx, args) => {
     await requireAdminSession(ctx, args.sessionToken);
-    const existingImage = await ctx.db.get(args.imageId);
+    const existingImage = await ctx.db.get("images", args.imageId);
 
     if (!existingImage) {
       throw new Error("This photo no longer exists.");
@@ -341,16 +343,16 @@ export const deleteImageEntry = mutation({
     for await (const comment of ctx.db
       .query("imageComments")
       .withIndex("by_image_id", (q) => q.eq("imageId", args.imageId))) {
-      await ctx.db.delete(comment._id);
+      await ctx.db.delete("imageComments", comment._id);
     }
 
     for await (const reaction of ctx.db
       .query("imageReactions")
       .withIndex("by_image_id", (q) => q.eq("imageId", args.imageId))) {
-      await ctx.db.delete(reaction._id);
+      await ctx.db.delete("imageReactions", reaction._id);
     }
 
-    await ctx.db.delete(args.imageId);
+    await ctx.db.delete("images", args.imageId);
     await ctx.storage.delete(existingImage.storageId);
 
     return { imageId: args.imageId };
@@ -359,7 +361,7 @@ export const deleteImageEntry = mutation({
 
 export const listImages = query({
   args: {
-    surface: v.union(v.literal("ai"), v.literal("art")),
+    surface: surfaceValidator,
     category: v.union(v.string(), v.null()),
     visitorId: v.union(v.string(), v.null()),
   },
@@ -416,7 +418,7 @@ export const listImages = query({
 export const listImagesPaginated = query({
   args: {
     paginationOpts: paginationOptsValidator,
-    surface: v.union(v.literal("ai"), v.literal("art")),
+    surface: surfaceValidator,
     category: v.union(v.string(), v.null()),
     visitorId: v.union(v.string(), v.null()),
   },
@@ -476,12 +478,12 @@ export const listImagesPaginated = query({
 export const setImageReaction = mutation({
   args: {
     imageId: v.id("images"),
-    surface: v.union(v.literal("ai"), v.literal("art")),
+    surface: surfaceValidator,
     visitorId: v.string(),
     value: v.union(v.literal("like"), v.literal("dislike"), v.null()),
   },
   handler: async (ctx, args) => {
-    const image = await ctx.db.get(args.imageId);
+    const image = await ctx.db.get("images", args.imageId);
 
     if (!image) {
       throw new Error("This photo no longer exists.");
@@ -506,7 +508,7 @@ export const setImageReaction = mutation({
 
     if (args.value === null) {
       if (existingReaction) {
-        await ctx.db.delete(existingReaction._id);
+        await ctx.db.delete("imageReactions", existingReaction._id);
       }
 
       return { value: null };
@@ -541,11 +543,11 @@ export const setImageReaction = mutation({
 export const notifyImageInteraction = mutation({
   args: {
     imageId: v.id("images"),
-    surface: v.union(v.literal("ai"), v.literal("art")),
+    surface: surfaceValidator,
     interaction: v.literal("comment_opened"),
   },
   handler: async (ctx, args) => {
-    const image = await ctx.db.get(args.imageId);
+    const image = await ctx.db.get("images", args.imageId);
 
     if (!image) {
       throw new Error("This photo no longer exists.");
@@ -567,7 +569,7 @@ export const notifyImageInteraction = mutation({
 
 export const listCategories = query({
   args: {
-    surface: v.union(v.literal("ai"), v.literal("art")),
+    surface: surfaceValidator,
   },
   handler: async (ctx, args) => {
     const images = await ctx.db
@@ -605,7 +607,7 @@ export const addImageComment = mutation({
     body: v.string(),
   },
   handler: async (ctx, args) => {
-    const image = await ctx.db.get(args.imageId);
+    const image = await ctx.db.get("images", args.imageId);
 
     if (!image) {
       throw new Error("This photo no longer exists.");
@@ -648,14 +650,26 @@ export const addImageComment = mutation({
 
 export const getThemeSettings = query({
   args: {
-    surface: v.union(v.literal("ai"), v.literal("art")),
+    surface: surfaceValidator,
   },
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     const settings =
       (await ctx.db
         .query("siteSettings")
         .withIndex("by_surface_and_key", (q) =>
+          q.eq("surface", args.surface).eq("key", THEME_SETTINGS_KEY),
+        )
+        .unique()) ??
+      (await ctx.db
+        .query("siteSettings")
+        .withIndex("by_surface_and_key", (q) =>
           q.eq("surface", "ai").eq("key", THEME_SETTINGS_KEY),
+        )
+        .unique()) ??
+      (await ctx.db
+        .query("siteSettings")
+        .withIndex("by_surface_and_key", (q) =>
+          q.eq("surface", "story").eq("key", THEME_SETTINGS_KEY),
         )
         .unique()) ??
       (await ctx.db
@@ -683,7 +697,7 @@ export const getThemeSettings = query({
 export const saveThemeSettings = mutation({
   args: {
     sessionToken: v.string(),
-    surface: v.union(v.literal("ai"), v.literal("art")),
+    surface: surfaceValidator,
     brandColor: v.string(),
     secondaryColor: v.string(),
     accentColor: v.string(),

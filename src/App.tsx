@@ -58,8 +58,8 @@ type LocationOption = {
   name: string;
 };
 
-type AppRoute = "/" | "/ai" | "/art";
-type AppSurface = "ai" | "art";
+type AppRoute = "/" | "/ai" | "/art" | "/story";
+type AppSurface = "ai" | "art" | "story";
 
 const HEX_COLOR_PATTERN = /^#([0-9A-F]{6})$/;
 const ADMIN_SESSION_STORAGE_KEY = "jayden-gallery-admin-session";
@@ -75,6 +75,10 @@ const normalizeAppPath = (pathname: string): AppRoute => {
 
   if (pathname === "/art") {
     return "/art";
+  }
+
+  if (pathname === "/story") {
+    return "/story";
   }
 
   return "/";
@@ -278,7 +282,8 @@ export default function App({ defaultThemeColors }: AppProps) {
 
     return normalizeAppPath(window.location.pathname);
   });
-  const activeSurface: AppSurface = currentRoute === "/art" ? "art" : "ai";
+  const activeSurface: AppSurface =
+    currentRoute === "/art" ? "art" : currentRoute === "/story" ? "story" : "ai";
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string | null>(null);
   const [selectedCategoryInitial, setSelectedCategoryInitial] = useState<string>("All");
   const isAlphabetFilterActive = selectedCategoryInitial !== "All";
@@ -522,7 +527,7 @@ export default function App({ defaultThemeColors }: AppProps) {
     title.trim() !== "" &&
       caption.trim() !== "" &&
       selectedFile &&
-      (activeSurface === "art" || (selectedCountry?.name && selectedCity?.name)),
+      (activeSurface !== "ai" || (selectedCountry?.name && selectedCity?.name)),
   );
   const helperText = useMemo(() => {
     if (selectedFile) {
@@ -548,7 +553,7 @@ export default function App({ defaultThemeColors }: AppProps) {
     editCategory.trim() !== "" &&
     editTitle.trim() !== "" &&
       editCaption.trim() !== "" &&
-      (activeSurface === "art" || (editCountry?.name && editCity?.name)),
+      (activeSurface !== "ai" || (editCountry?.name && editCity?.name)),
   );
   const isAuthenticated = authState?.isAuthenticated ?? false;
   const categoryOptions = useMemo(() => categories ?? [], [categories]);
@@ -1268,13 +1273,29 @@ export default function App({ defaultThemeColors }: AppProps) {
     activeImage ? { imageId: activeImage._id } : "skip",
   );
   const isCommentFormValid = Boolean(commentAuthorName.trim() && commentBody.trim());
-  const activeBrandTab = currentRoute === "/ai" ? "ai" : currentRoute === "/art" ? "art" : false;
+  const activeBrandTab =
+    currentRoute === "/ai"
+      ? "ai"
+      : currentRoute === "/art"
+        ? "art"
+        : currentRoute === "/story"
+          ? "story"
+          : false;
   const isArtPage = currentRoute === "/art";
+  const isStoryPage = currentRoute === "/story";
   const isHomePage = currentRoute === "/";
-  const activeSurfaceLabel = isArtPage ? "Jayden's Art" : "Jayden's AI";
-  const activeSurfaceShortLabel = isArtPage ? "Jayden Art" : "Jayden AI";
+  const activeSurfaceLabel = isArtPage
+    ? "Jayden's Art"
+    : isStoryPage
+      ? "Jayden's Story"
+      : "Jayden's AI";
+  const activeSurfaceShortLabel = isArtPage
+    ? "Jayden Art"
+    : isStoryPage
+      ? "Jayden Story"
+      : "Jayden AI";
   const isProfileMenuOpen = Boolean(profileMenuAnchorEl);
-  const shouldShowLocationDetails = !isArtPage;
+  const shouldShowLocationDetails = activeSurface === "ai";
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -1468,7 +1489,7 @@ export default function App({ defaultThemeColors }: AppProps) {
     >
       <Stack spacing={2.5} sx={{ position: "relative", zIndex: 1, alignItems: "center", textAlign: "center" }}>
         <Typography variant="overline" sx={{ color: "primary.dark", letterSpacing: "0.24em", fontWeight: 800 }}>
-          {isArtPage ? "Jayden Art Gallery" : "Jayden AI Gallery"}
+          {isArtPage ? "Jayden Art Gallery" : isStoryPage ? "Jayden Story Archive" : "Jayden AI Gallery"}
         </Typography>
         <Typography variant="h2" sx={{ fontSize: { xs: "2.8rem", md: "4.6rem" }, maxWidth: 920 }}>
           {activeSurfaceLabel}
@@ -1476,6 +1497,8 @@ export default function App({ defaultThemeColors }: AppProps) {
         <Typography variant="h6" color="text.secondary" sx={{ maxWidth: 760, lineHeight: 1.65 }}>
           {isArtPage
             ? "Jayden's Art has its own dedicated archive with separate uploads, categories, comments, likes, dislikes, and filters."
+            : isStoryPage
+              ? "Jayden's Story gathers the moments, memories, milestones, and little sparks that give the gallery its heartbeat."
             : "Jayden's AI has its own dedicated archive with separate uploads, categories, comments, likes, dislikes, and filters."}
         </Typography>
       </Stack>
@@ -1502,12 +1525,12 @@ export default function App({ defaultThemeColors }: AppProps) {
             Jayden&apos;s Creative Spaces
           </Typography>
           <Typography variant="h6" color="text.secondary" sx={{ maxWidth: 760, lineHeight: 1.65 }}>
-            Pick the space you want to open now, then move between Jayden&apos;s AI and Jayden&apos;s Art from the
-            centered navbar tabs.
+            Pick the space you want to open now, then move between Jayden&apos;s AI, Jayden&apos;s Art, and
+            Jayden&apos;s Story from the centered navbar tabs.
           </Typography>
         </Stack>
       </Paper>
-      <Box sx={{ display: "grid", gap: 3, gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" } }}>
+      <Box sx={{ display: "grid", gap: 3, gridTemplateColumns: { xs: "1fr", md: "repeat(3, minmax(0, 1fr))" } }}>
         {[
           {
             title: "Jayden's AI",
@@ -1518,6 +1541,11 @@ export default function App({ defaultThemeColors }: AppProps) {
             title: "Jayden's Art",
             description: "Open the dedicated art archive with its own uploads, categories, comments, likes, dislikes, and filters.",
             path: "/art" as const,
+          },
+          {
+            title: "Jayden's Story",
+            description: "Open the narrative archive for memories, milestones, behind-the-scenes moments, and the story around the work.",
+            path: "/story" as const,
           },
         ].map((destination) => (
           <Card
@@ -1633,7 +1661,9 @@ export default function App({ defaultThemeColors }: AppProps) {
           >
             <Tabs
               value={activeBrandTab}
-              onChange={(_, value: "ai" | "art") => navigateTo(value === "ai" ? "/ai" : "/art")}
+              onChange={(_, value: AppSurface) => {
+                navigateTo(value === "ai" ? "/ai" : value === "art" ? "/art" : "/story");
+              }}
               aria-label="Brand sections"
               sx={{
                 minHeight: 0,
@@ -1654,6 +1684,7 @@ export default function App({ defaultThemeColors }: AppProps) {
             >
               <Tab label="Jayden's AI" value="ai" />
               <Tab label="Jayden's Art" value="art" />
+              <Tab label="Jayden's Story" value="story" />
             </Tabs>
           </Box>
           <Stack

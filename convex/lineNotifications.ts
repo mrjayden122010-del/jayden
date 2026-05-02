@@ -18,7 +18,7 @@ export const sendGroupMessage = internalAction({
       v.literal("liked"),
       v.literal("disliked"),
     ),
-    surface: v.union(v.literal("ai"), v.literal("art")),
+    surface: v.union(v.literal("ai"), v.literal("art"), v.literal("story")),
     title: v.optional(v.string()),
     category: v.optional(v.string()),
     country: v.optional(v.string()),
@@ -40,7 +40,12 @@ export const sendGroupMessage = internalAction({
     const location = formatLocation([args.streetAddress, args.city, args.country]);
     const title = args.title?.trim() || "Untitled image";
     const category = args.category?.trim() || "Uncategorized";
-    const surfaceLabel = args.surface === "art" ? "Jayden Art" : "Jayden AI";
+    const surfaceLabel =
+      args.surface === "art"
+        ? "Jayden Art"
+        : args.surface === "story"
+          ? "Jayden Story"
+          : "Jayden AI";
     const prefix = `[${surfaceLabel}]`;
 
     const text =
