@@ -689,7 +689,7 @@ export const getThemeSettings = query({
           brandColor: settings.brandColor,
           secondaryColor: settings.secondaryColor ?? settings.brandColor,
           accentColor: settings.accentColor ?? settings.brandColor,
-          textColor: LOCKED_TEXT_COLOR,
+          textColor: settings.textColor ?? LOCKED_TEXT_COLOR,
         }
       : null;
   },
@@ -709,14 +709,15 @@ export const saveThemeSettings = mutation({
     const brandColor = normalizeHexColor(args.brandColor);
     const secondaryColor = normalizeHexColor(args.secondaryColor);
     const accentColor = normalizeHexColor(args.accentColor);
-    const textColor = LOCKED_TEXT_COLOR;
+    const textColor = normalizeHexColor(args.textColor);
 
     if (
       !HEX_COLOR_PATTERN.test(brandColor) ||
       !HEX_COLOR_PATTERN.test(secondaryColor) ||
-      !HEX_COLOR_PATTERN.test(accentColor)
+      !HEX_COLOR_PATTERN.test(accentColor) ||
+      !HEX_COLOR_PATTERN.test(textColor)
     ) {
-      throw new Error("Please provide three valid 6-digit hex colors.");
+      throw new Error("Please provide four valid 6-digit hex colors.");
     }
 
     for (const surface of THEME_SURFACES) {

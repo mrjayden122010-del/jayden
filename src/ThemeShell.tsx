@@ -24,7 +24,6 @@ const DEFAULT_THEME_COLORS: ThemeColors = {
   accentColor: "#0F766E",
   textColor: "#000000",
 };
-const LOCKED_TEXT_COLOR = "#000000";
 
 const HEX_COLOR_PATTERN = /^#([0-9A-F]{6})$/;
 
@@ -38,7 +37,7 @@ const resolveThemeColors = (themeColors: Partial<ThemeColors> | null | undefined
   secondaryColor:
     normalizeHexColor(themeColors?.secondaryColor ?? "") ?? DEFAULT_THEME_COLORS.secondaryColor,
   accentColor: normalizeHexColor(themeColors?.accentColor ?? "") ?? DEFAULT_THEME_COLORS.accentColor,
-  textColor: LOCKED_TEXT_COLOR,
+  textColor: normalizeHexColor(themeColors?.textColor ?? "") ?? DEFAULT_THEME_COLORS.textColor,
 });
 
 const buildTheme = (themeColors: ThemeColors) => {

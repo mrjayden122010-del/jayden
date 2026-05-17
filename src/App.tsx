@@ -64,7 +64,6 @@ type AppSurface = "ai" | "art" | "story";
 const HEX_COLOR_PATTERN = /^#([0-9A-F]{6})$/;
 const ADMIN_SESSION_STORAGE_KEY = "jayden-gallery-admin-session";
 const PUBLIC_VISITOR_ID_STORAGE_KEY = "jayden-gallery-public-visitor-id";
-const LOCKED_TEXT_COLOR = "#000000";
 const MAX_UPLOAD_DIMENSION = 1600;
 const WEBP_QUALITY_STEPS = [0.82, 0.74, 0.68, 0.6];
 const CATEGORY_INITIAL_FILTERS = ["All", ...Array.from({ length: 26 }, (_, index) => String.fromCharCode(65 + index))];
@@ -389,6 +388,7 @@ export default function App({ defaultThemeColors }: AppProps) {
   const [brandColorInput, setBrandColorInput] = useState(defaultThemeColors.brandColor);
   const [secondaryColorInput, setSecondaryColorInput] = useState(defaultThemeColors.secondaryColor);
   const [accentColorInput, setAccentColorInput] = useState(defaultThemeColors.accentColor);
+  const [textColorInput, setTextColorInput] = useState(defaultThemeColors.textColor);
   const [themeErrorMessage, setThemeErrorMessage] = useState("");
   const [isSavingTheme, setIsSavingTheme] = useState(false);
   const [locationModule, setLocationModule] = useState<CountryStateCityModule | null>(null);
@@ -412,6 +412,7 @@ export default function App({ defaultThemeColors }: AppProps) {
       setBrandColorInput(defaultThemeColors.brandColor);
       setSecondaryColorInput(defaultThemeColors.secondaryColor);
       setAccentColorInput(defaultThemeColors.accentColor);
+      setTextColorInput(defaultThemeColors.textColor);
       setThemeErrorMessage("");
     }
   }, [defaultThemeColors, isThemeDialogOpen]);
@@ -555,7 +556,9 @@ export default function App({ defaultThemeColors }: AppProps) {
   const previewAccentColor = HEX_COLOR_PATTERN.test(accentColorInput)
     ? accentColorInput
     : currentThemeColors.accentColor;
-  const previewTextColor = LOCKED_TEXT_COLOR;
+  const previewTextColor = HEX_COLOR_PATTERN.test(textColorInput)
+    ? textColorInput
+    : currentThemeColors.textColor;
   const isEditFormValid = Boolean(
     editCategory.trim() !== "" &&
     editTitle.trim() !== "" &&
@@ -700,6 +703,7 @@ export default function App({ defaultThemeColors }: AppProps) {
     setBrandColorInput(defaultThemeColors.brandColor);
     setSecondaryColorInput(defaultThemeColors.secondaryColor);
     setAccentColorInput(defaultThemeColors.accentColor);
+    setTextColorInput(defaultThemeColors.textColor);
     setThemeErrorMessage("");
   };
 
@@ -936,7 +940,7 @@ export default function App({ defaultThemeColors }: AppProps) {
     }
   };
 
-  const handleThemeColorChange = (key: Exclude<keyof ThemeColors, "textColor">, value: string) => {
+  const handleThemeColorChange = (key: keyof ThemeColors, value: string) => {
     const normalized = normalizeHexColor(value);
 
     if (key === "brandColor") {
@@ -949,6 +953,10 @@ export default function App({ defaultThemeColors }: AppProps) {
 
     if (key === "accentColor") {
       setAccentColorInput(normalized);
+    }
+
+    if (key === "textColor") {
+      setTextColorInput(normalized);
     }
 
     setThemeErrorMessage("");
@@ -967,13 +975,15 @@ export default function App({ defaultThemeColors }: AppProps) {
     const normalizedBrandColor = normalizeHexColor(brandColorInput);
     const normalizedSecondaryColor = normalizeHexColor(secondaryColorInput);
     const normalizedAccentColor = normalizeHexColor(accentColorInput);
+    const normalizedTextColor = normalizeHexColor(textColorInput);
 
     if (
       !HEX_COLOR_PATTERN.test(normalizedBrandColor) ||
       !HEX_COLOR_PATTERN.test(normalizedSecondaryColor) ||
-      !HEX_COLOR_PATTERN.test(normalizedAccentColor)
+      !HEX_COLOR_PATTERN.test(normalizedAccentColor) ||
+      !HEX_COLOR_PATTERN.test(normalizedTextColor)
     ) {
-      setThemeErrorMessage("Enter three full 6-digit hex colors like #6B7280.");
+      setThemeErrorMessage("Enter four full 6-digit hex colors like #6B7280.");
       return;
     }
 
@@ -987,7 +997,7 @@ export default function App({ defaultThemeColors }: AppProps) {
         brandColor: normalizedBrandColor,
         secondaryColor: normalizedSecondaryColor,
         accentColor: normalizedAccentColor,
-        textColor: LOCKED_TEXT_COLOR,
+        textColor: normalizedTextColor,
       });
       setIsThemeDialogOpen(false);
     } catch (error) {
@@ -1430,6 +1440,7 @@ export default function App({ defaultThemeColors }: AppProps) {
     setBrandColorInput(defaultThemeColors.brandColor);
     setSecondaryColorInput(defaultThemeColors.secondaryColor);
     setAccentColorInput(defaultThemeColors.accentColor);
+    setTextColorInput(defaultThemeColors.textColor);
     setThemeErrorMessage("");
     setIsThemeDialogOpen(true);
   };
@@ -2553,6 +2564,13 @@ export default function App({ defaultThemeColors }: AppProps) {
                       value: accentColorInput,
                       fallback: currentThemeColors.accentColor,
                     },
+                    {
+                      key: "textColor" as const,
+                      label: "Text color",
+                      helperText: "Used for headings, body copy, and readable foreground details.",
+                      value: textColorInput,
+                      fallback: currentThemeColors.textColor,
+                    },
                   ].map((colorField) => (
                     <Paper
                       key={colorField.key}
@@ -2641,9 +2659,14 @@ export default function App({ defaultThemeColors }: AppProps) {
                     }}
                   >
                     <Stack direction="row" spacing={1}>
-                      {[previewBrandColor, previewSecondaryColor, previewAccentColor].map((color) => (
+                      {[
+                        { key: "preview-brand", color: previewBrandColor },
+                        { key: "preview-secondary", color: previewSecondaryColor },
+                        { key: "preview-accent", color: previewAccentColor },
+                        { key: "preview-text", color: previewTextColor },
+                      ].map(({ key, color }) => (
                         <Box
-                          key={color}
+                          key={key}
                           sx={{
                             width: 24,
                             height: 24,
@@ -2659,7 +2682,7 @@ export default function App({ defaultThemeColors }: AppProps) {
                         Preview Button
                       </Button>
                       <Typography variant="body2" sx={{ color: alpha(previewTextColor, 0.8) }}>
-                        Text stays locked to black for clean readability.
+                        Text follows the fourth palette colour.
                       </Typography>
                     </Stack>
                   </Box>
