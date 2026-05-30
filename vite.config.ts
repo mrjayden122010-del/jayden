@@ -32,7 +32,7 @@ export default defineConfig(({ mode }) => {
             try {
               await createAiStoryPhotoHandler(request, response);
             } catch {
-              sendJson(response, 500, "Unable to create the AI story photo.");
+              sendJson(response, 500, "Error");
             }
           });
         },

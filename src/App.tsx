@@ -1310,16 +1310,14 @@ export default function App({ defaultThemeColors }: AppProps) {
         body: JSON.stringify({ prompt }),
       });
 
-      const payload = (await response.json()) as Partial<AiStoryPhotoResult> & {
-        message?: string;
-      };
+      const payload = (await response.json()) as Partial<AiStoryPhotoResult>;
 
       if (!response.ok) {
-        throw new Error(payload.message || "Unable to create the AI story photo.");
+        throw new Error("Error");
       }
 
       if (!payload.imageUrl || !payload.title || !payload.caption || !payload.category) {
-        throw new Error("The AI response was incomplete. Try a more specific prompt.");
+        throw new Error("Error");
       }
 
       const generatedFile = await convertImageUrlToFile(payload.imageUrl);
@@ -1329,8 +1327,8 @@ export default function App({ defaultThemeColors }: AppProps) {
       setTitle(payload.title);
       setCaption(payload.caption);
       setSelectedFile(optimizedFile);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Unable to create the AI story photo.");
+    } catch {
+      setErrorMessage("Error");
     } finally {
       setIsGeneratingAiPhoto(false);
     }

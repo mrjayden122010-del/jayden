@@ -297,7 +297,7 @@ export default async function handler(request: IncomingMessage, response: Server
   const apiKey = process.env.OPENROUTER_API_KEY ?? process.env.OPENROUTER;
 
   if (!apiKey) {
-    sendJson(response, 500, { message: "OpenRouter is not configured." });
+    sendJson(response, 500, { message: "Error" });
     return;
   }
 
@@ -307,12 +307,12 @@ export default async function handler(request: IncomingMessage, response: Server
     const prompt = typeof payload.prompt === "string" ? payload.prompt.trim() : "";
 
     if (!prompt) {
-      sendJson(response, 400, { message: "Please enter a story prompt." });
+      sendJson(response, 400, { message: "Error" });
       return;
     }
 
     if (prompt.length > MAX_PROMPT_LENGTH) {
-      sendJson(response, 400, { message: "Please keep the prompt under 1,200 characters." });
+      sendJson(response, 400, { message: "Error" });
       return;
     }
 
@@ -325,9 +325,7 @@ export default async function handler(request: IncomingMessage, response: Server
       textModel: FREE_ROUTER_MODEL,
       imageModel: image.imageModel,
     });
-  } catch (error) {
-    sendJson(response, 500, {
-      message: error instanceof Error ? error.message : "Unable to create the AI story photo.",
-    });
+  } catch {
+    sendJson(response, 500, { message: "Error" });
   }
 }
