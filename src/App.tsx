@@ -26,6 +26,7 @@ import {
   Tab,
   Tabs,
   TextField,
+  Tooltip,
   Toolbar,
   Typography,
 } from "@mui/material";
@@ -38,6 +39,13 @@ import type { ICity, ICountry } from "country-state-city";
 
 type UploadResult = {
   storageId: Id<"_storage">;
+};
+
+type AiStoryPhotoResult = {
+  title: string;
+  caption: string;
+  category: string;
+  imageUrl: string;
 };
 
 type ThemeColors = {
@@ -68,6 +76,37 @@ const MAX_UPLOAD_DIMENSION = 1600;
 const WEBP_QUALITY_STEPS = [0.82, 0.74, 0.68, 0.6];
 const CATEGORY_INITIAL_FILTERS = ["All", ...Array.from({ length: 26 }, (_, index) => String.fromCharCode(65 + index))];
 const STORY_CAPTION_PREVIEW_WORD_LIMIT = 30;
+const PUTER_SCRIPT_URL = "https://js.puter.com/v2/";
+const TEXT_TO_SPEECH_ERROR_MESSAGE = "Speech is not available right now. Please try again in a moment.";
+const TEXT_TO_SPEECH_NETWORK_ERROR_MESSAGE =
+  "Puter speech could not be reached, so this device is reading the post instead.";
+
+type SpeechPlaybackState = {
+  key: string;
+  status: "loading" | "playing";
+} | null;
+
+type PuterAudio = HTMLAudioElement & {
+  pause: () => void;
+  play: () => Promise<void>;
+};
+
+declare global {
+  interface Window {
+    puter?: {
+      ai?: {
+        txt2speech: (
+          text: string,
+          options?: {
+            voice?: string;
+            engine?: string;
+            language?: string;
+          },
+        ) => Promise<PuterAudio>;
+      };
+    };
+  }
+}
 
 const normalizeAppPath = (pathname: string): AppRoute => {
   if (pathname === "/ai") {
@@ -281,6 +320,56 @@ const ThumbDownAltOutlinedIcon = (props: SvgIconProps) => (
   </SvgIcon>
 );
 
+const VolumeUpOutlinedIcon = (props: SvgIconProps) => (
+  <SvgIcon {...props}>
+    <path d="M3 9v6h4l5 5V4L7 9zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05A4.5 4.5 0 0 0 16.5 12m-2.5-9.7v2.06a8 8 0 0 1 0 15.28v2.06a10 10 0 0 0 0-19.4" />
+  </SvgIcon>
+);
+
+const AutoAwesomeOutlinedIcon = (props: SvgIconProps) => (
+  <SvgIcon {...props}>
+    <path d="m19 9 1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25zM9 20l2.5-5.5L17 12l-5.5-2.5L9 4 6.5 9.5 1 12l5.5 2.5zM19 15l-1.25 2.75L15 20l2.75 1.25L19 24l1.25-2.75L23 20l-2.75-1.25z" />
+  </SvgIcon>
+);
+
+type TextToSpeechButtonProps = {
+  isLoading: boolean;
+  isPlaying: boolean;
+  label: string;
+  onClick: () => void;
+};
+
+const TextToSpeechButton = ({ isLoading, isPlaying, label, onClick }: TextToSpeechButtonProps) => (
+  <Tooltip title={isPlaying ? "Stop reading" : label}>
+    <span>
+      <IconButton
+        aria-label={isPlaying ? "Stop reading this post" : label}
+        color={isPlaying ? "secondary" : "primary"}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+
+          if (isLoading) {
+            return;
+          }
+
+          onClick();
+        }}
+        size="small"
+        sx={{
+          border: "1px solid currentColor",
+          backgroundColor: alpha("#ffffff", 0.72),
+          "&:hover": {
+            backgroundColor: alpha("#ffffff", 0.94),
+          },
+        }}
+      >
+        {isLoading ? <CircularProgress color="inherit" size={18} /> : <VolumeUpOutlinedIcon fontSize="small" />}
+      </IconButton>
+    </span>
+  </Tooltip>
+);
+
 export default function App({ defaultThemeColors }: AppProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -377,6 +466,8 @@ export default function App({ defaultThemeColors }: AppProps) {
   const [editStreetAddress, setEditStreetAddress] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [isGeneratingAiPhoto, setIsGeneratingAiPhoto] = useState(false);
   const [replacementFile, setReplacementFile] = useState<File | null>(null);
   const [replacementPreviewUrl, setReplacementPreviewUrl] = useState<string | null>(null);
   const [isDragActive, setIsDragActive] = useState(false);
@@ -404,8 +495,13 @@ export default function App({ defaultThemeColors }: AppProps) {
   const [reactionErrorMessage, setReactionErrorMessage] = useState("");
   const [pendingReactionImageId, setPendingReactionImageId] = useState<Id<"images"> | null>(null);
   const [profileMenuAnchorEl, setProfileMenuAnchorEl] = useState<HTMLElement | null>(null);
+  const [speechPlayback, setSpeechPlayback] = useState<SpeechPlaybackState>(null);
+  const [speechErrorMessage, setSpeechErrorMessage] = useState("");
   const commentsSectionRef = useRef<HTMLDivElement | null>(null);
   const loadMoreTriggerRef = useRef<HTMLDivElement | null>(null);
+  const speechAudioRef = useRef<HTMLAudioElement | null>(null);
+  const speechObjectUrlRef = useRef<string | null>(null);
+  const speechUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   useEffect(() => {
     if (!isThemeDialogOpen) {
@@ -469,6 +565,17 @@ export default function App({ defaultThemeColors }: AppProps) {
       cancelled = true;
     };
   }, [activeSurface, editingImageId, isDialogOpen, locationModule]);
+
+  useEffect(() => {
+    return () => {
+      speechAudioRef.current?.pause();
+      window.speechSynthesis.cancel();
+
+      if (speechObjectUrlRef.current) {
+        URL.revokeObjectURL(speechObjectUrlRef.current);
+      }
+    };
+  }, []);
 
   const cityOptions = useMemo(() => {
     if (!selectedCountry || !locationModule) {
@@ -566,6 +673,7 @@ export default function App({ defaultThemeColors }: AppProps) {
       (activeSurface !== "ai" || (editCountry?.name && editCity?.name)),
   );
   const isAuthenticated = authState?.isAuthenticated ?? false;
+  const shouldShowSpeechControls = activeSurface === "ai" || activeSurface === "story";
   const categoryOptions = useMemo(() => categories ?? [], [categories]);
   const galleryImages = useMemo(
     () => (isAlphabetFilterActive ? alphabetFilteredImages ?? [] : images ?? []),
@@ -680,13 +788,15 @@ export default function App({ defaultThemeColors }: AppProps) {
     setStreetAddress("");
     setSelectedFile(null);
     setPreviewUrl(null);
+    setAiPrompt("");
+    setIsGeneratingAiPhoto(false);
     setIsDragActive(false);
     setErrorMessage("");
     setIsSubmitting(false);
   };
 
   const handleClose = () => {
-    if (isSubmitting) {
+    if (isSubmitting || isGeneratingAiPhoto) {
       return;
     }
 
@@ -789,6 +899,7 @@ export default function App({ defaultThemeColors }: AppProps) {
   };
 
   const handleViewerClose = () => {
+    stopSpeechPlayback();
     setActiveImageIndex(null);
   };
 
@@ -801,6 +912,8 @@ export default function App({ defaultThemeColors }: AppProps) {
     if (!filteredImages.length) {
       return;
     }
+
+    stopSpeechPlayback();
 
     setActiveImageIndex((currentIndex) => {
       if (currentIndex === null) {
@@ -845,6 +958,137 @@ export default function App({ defaultThemeColors }: AppProps) {
     setIsDragActive(false);
     const file = event.dataTransfer.files?.[0] ?? null;
     void handleSelectedFile(file);
+  };
+
+  const stopSpeechPlayback = () => {
+    speechAudioRef.current?.pause();
+    speechAudioRef.current = null;
+    speechUtteranceRef.current = null;
+    window.speechSynthesis.cancel();
+
+    if (speechObjectUrlRef.current) {
+      URL.revokeObjectURL(speechObjectUrlRef.current);
+      speechObjectUrlRef.current = null;
+    }
+
+    setSpeechPlayback(null);
+  };
+
+  const playBrowserSpeech = (speechKey: string, text: string) => {
+    if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
+      throw new Error(TEXT_TO_SPEECH_ERROR_MESSAGE);
+    }
+
+    const utterance = new SpeechSynthesisUtterance(text);
+
+    utterance.onend = stopSpeechPlayback;
+    utterance.onerror = () => {
+      stopSpeechPlayback();
+      setSpeechErrorMessage(TEXT_TO_SPEECH_ERROR_MESSAGE);
+    };
+
+    speechUtteranceRef.current = utterance;
+    setSpeechPlayback({ key: speechKey, status: "playing" });
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const loadPuter = () =>
+    new Promise<NonNullable<Window["puter"]>>((resolve, reject) => {
+      if (window.puter?.ai?.txt2speech) {
+        resolve(window.puter);
+        return;
+      }
+
+      const existingScript = document.querySelector<HTMLScriptElement>(
+        `script[src="${PUTER_SCRIPT_URL}"]`,
+      );
+
+      if (existingScript) {
+        existingScript.addEventListener(
+          "load",
+          () => {
+            if (window.puter?.ai?.txt2speech) {
+              resolve(window.puter);
+              return;
+            }
+
+            reject(new Error(TEXT_TO_SPEECH_ERROR_MESSAGE));
+          },
+          { once: true },
+        );
+        existingScript.addEventListener("error", () => reject(new Error(TEXT_TO_SPEECH_ERROR_MESSAGE)), {
+          once: true,
+        });
+        return;
+      }
+
+      const script = document.createElement("script");
+      script.src = PUTER_SCRIPT_URL;
+      script.async = true;
+      script.onload = () => {
+        if (window.puter?.ai?.txt2speech) {
+          resolve(window.puter);
+          return;
+        }
+
+        reject(new Error(TEXT_TO_SPEECH_ERROR_MESSAGE));
+      };
+      script.onerror = () => reject(new Error(TEXT_TO_SPEECH_ERROR_MESSAGE));
+      document.body.appendChild(script);
+    });
+
+  const handleTextToSpeech = async (speechKey: string, text: string) => {
+    const normalizedText = text.trim();
+
+    if (!normalizedText) {
+      return;
+    }
+
+    if (speechPlayback?.key === speechKey && speechPlayback.status === "playing") {
+      stopSpeechPlayback();
+      return;
+    }
+
+    stopSpeechPlayback();
+    setSpeechErrorMessage("");
+    setSpeechPlayback({ key: speechKey, status: "loading" });
+
+    try {
+      const puter = await loadPuter();
+      const audio = await puter.ai!.txt2speech(normalizedText, {
+        voice: "Joanna",
+        engine: "neural",
+        language: "en-US",
+      });
+
+      speechAudioRef.current = audio;
+
+      audio.onended = stopSpeechPlayback;
+      audio.onerror = () => {
+        stopSpeechPlayback();
+        setSpeechErrorMessage(TEXT_TO_SPEECH_ERROR_MESSAGE);
+      };
+
+      await audio.play();
+      setSpeechPlayback({ key: speechKey, status: "playing" });
+    } catch (error) {
+      try {
+        const fallbackMessage =
+          error instanceof TypeError && error.message === "Failed to fetch"
+            ? TEXT_TO_SPEECH_NETWORK_ERROR_MESSAGE
+            : `Puter speech is unavailable: ${
+                error instanceof Error ? error.message : TEXT_TO_SPEECH_ERROR_MESSAGE
+              } This device is reading the post instead.`;
+
+        stopSpeechPlayback();
+        setSpeechErrorMessage(fallbackMessage);
+        playBrowserSpeech(speechKey, normalizedText);
+      } catch (fallbackError) {
+        setSpeechErrorMessage(
+          fallbackError instanceof Error ? fallbackError.message : TEXT_TO_SPEECH_ERROR_MESSAGE,
+        );
+      }
+    }
   };
 
   const handlePaste = (event: ClipboardEvent<HTMLDivElement>) => {
@@ -1006,6 +1250,89 @@ export default function App({ defaultThemeColors }: AppProps) {
       );
     } finally {
       setIsSavingTheme(false);
+    }
+  };
+
+  const convertImageUrlToFile = async (imageUrl: string) => {
+    if (imageUrl.startsWith("data:image/")) {
+      const [metadata = "", base64Data = ""] = imageUrl.split(",", 2);
+      const mimeType = metadata.match(/^data:([^;]+);base64$/)?.[1] ?? "image/png";
+
+      if (!base64Data) {
+        throw new Error("The AI photo response was empty.");
+      }
+
+      const binaryString = window.atob(base64Data);
+      const bytes = new Uint8Array(binaryString.length);
+
+      for (let index = 0; index < binaryString.length; index += 1) {
+        bytes[index] = binaryString.charCodeAt(index);
+      }
+
+      return new File([bytes], `ai-story-photo.${mimeTypeToExtension(mimeType)}`, {
+        type: mimeType,
+        lastModified: Date.now(),
+      });
+    }
+
+    const imageResponse = await fetch(imageUrl);
+
+    if (!imageResponse.ok) {
+      throw new Error("The AI photo could not be downloaded.");
+    }
+
+    const imageBlob = await imageResponse.blob();
+    const imageType = imageBlob.type || "image/png";
+
+    return new File([imageBlob], `ai-story-photo.${mimeTypeToExtension(imageType)}`, {
+      type: imageType,
+      lastModified: Date.now(),
+    });
+  };
+
+  const handleAiStoryPhotoCreate = async () => {
+    const prompt = aiPrompt.trim();
+
+    if (!prompt) {
+      setErrorMessage("Describe the story you want AI to create first.");
+      return;
+    }
+
+    setIsGeneratingAiPhoto(true);
+    setErrorMessage("");
+
+    try {
+      const response = await fetch("/api/create-ai-story-photo", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ prompt }),
+      });
+
+      const payload = (await response.json()) as Partial<AiStoryPhotoResult> & {
+        message?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.message || "Unable to create the AI story photo.");
+      }
+
+      if (!payload.imageUrl || !payload.title || !payload.caption || !payload.category) {
+        throw new Error("The AI response was incomplete. Try a more specific prompt.");
+      }
+
+      const generatedFile = await convertImageUrlToFile(payload.imageUrl);
+      const optimizedFile = await compressImageFile(generatedFile);
+
+      setSelectedCategory(payload.category);
+      setTitle(payload.title);
+      setCaption(payload.caption);
+      setSelectedFile(optimizedFile);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to create the AI story photo.");
+    } finally {
+      setIsGeneratingAiPhoto(false);
     }
   };
 
@@ -1568,7 +1895,11 @@ export default function App({ defaultThemeColors }: AppProps) {
               boxShadow: `0 20px 42px ${alpha(theme.palette.primary.dark, 0.12)}`,
             }}
           >
-            <CardActionArea onClick={() => navigateTo(destination.path)} sx={{ height: "100%", alignItems: "stretch" }}>
+            <CardActionArea
+              component="div"
+              onClick={() => navigateTo(destination.path)}
+              sx={{ height: "100%", alignItems: "stretch" }}
+            >
               <CardContent sx={{ p: 3.5 }}>
                 <Stack spacing={2.25}>
                   <Typography variant="h4">{destination.title}</Typography>
@@ -1576,7 +1907,25 @@ export default function App({ defaultThemeColors }: AppProps) {
                     {destination.description}
                   </Typography>
                   <Box sx={{ pt: 1 }}>
-                    <Button variant="contained">Open {destination.title}</Button>
+                    <Box
+                      component="span"
+                      sx={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        minHeight: 36,
+                        px: 2,
+                        borderRadius: theme.shape.borderRadius,
+                        color: theme.palette.primary.contrastText,
+                        bgcolor: theme.palette.primary.main,
+                        fontSize: theme.typography.button.fontSize,
+                        fontWeight: theme.typography.button.fontWeight,
+                        lineHeight: theme.typography.button.lineHeight,
+                        textTransform: theme.typography.button.textTransform,
+                        boxShadow: theme.shadows[2],
+                      }}
+                    >
+                      Open {destination.title}
+                    </Box>
                   </Box>
                 </Stack>
               </CardContent>
@@ -1972,6 +2321,7 @@ export default function App({ defaultThemeColors }: AppProps) {
                 </Paper>
               ) : (
                 <>
+                  {speechErrorMessage ? <Alert severity="error">{speechErrorMessage}</Alert> : null}
                   <Box
                     sx={{
                       display: "grid",
@@ -2036,12 +2386,14 @@ export default function App({ defaultThemeColors }: AppProps) {
                               sx={{ alignSelf: "flex-start" }}
                             />
                           ) : null}
-                          <Typography variant="h5">{image.title}</Typography>
-                          <Typography variant="body1" color="text.secondary">
-                            {isStoryPage
-                              ? createWordPreview(image.caption, STORY_CAPTION_PREVIEW_WORD_LIMIT)
-                              : image.caption}
-                          </Typography>
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography variant="h5">{image.title}</Typography>
+                            <Typography variant="body1" color="text.secondary" sx={{ mt: 1.5 }}>
+                              {isStoryPage
+                                ? createWordPreview(image.caption, STORY_CAPTION_PREVIEW_WORD_LIMIT)
+                                : image.caption}
+                            </Typography>
+                          </Box>
                           {shouldShowLocationDetails && (image.country || image.city || image.streetAddress) ? (
                             <Chip
                               label={[image.streetAddress, image.city, image.country].filter(Boolean).join(", ")}
@@ -2069,6 +2421,25 @@ export default function App({ defaultThemeColors }: AppProps) {
                     </CardActionArea>
                     <Stack spacing={1.25} sx={{ px: 2, pb: 2 }}>
                       <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: "wrap" }}>
+                    {shouldShowSpeechControls ? (
+                      <TextToSpeechButton
+                        isLoading={
+                          speechPlayback?.key === `card-${image._id}` &&
+                          speechPlayback.status === "loading"
+                        }
+                        isPlaying={
+                          speechPlayback?.key === `card-${image._id}` &&
+                          speechPlayback.status === "playing"
+                        }
+                        label="Read this post aloud"
+                        onClick={() => {
+                          void handleTextToSpeech(
+                            `card-${image._id}`,
+                            `${image.title}. ${image.caption}`,
+                          );
+                        }}
+                      />
+                    ) : null}
                     <Chip
                       icon={<CommentOutlinedIcon fontSize="small" />}
                       label={`${image.commentCount} ${image.commentCount === 1 ? "comment" : "comments"}`}
@@ -2302,10 +2673,38 @@ export default function App({ defaultThemeColors }: AppProps) {
                       sx={{ alignSelf: "flex-start" }}
                     />
                   ) : null}
-                  <Typography variant="h6">About this artwork</Typography>
-                  <Typography variant="body1" color="text.secondary">
-                    {activeImage.caption}
-                  </Typography>
+                  {speechErrorMessage ? <Alert severity="error">{speechErrorMessage}</Alert> : null}
+                  <Stack
+                    direction="row"
+                    spacing={1.5}
+                    sx={{ alignItems: "flex-start", justifyContent: "space-between" }}
+                  >
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="h6">About this artwork</Typography>
+                      <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
+                        {activeImage.caption}
+                      </Typography>
+                    </Box>
+                    {shouldShowSpeechControls ? (
+                      <TextToSpeechButton
+                        isLoading={
+                          speechPlayback?.key === `viewer-${activeImage._id}` &&
+                          speechPlayback.status === "loading"
+                        }
+                        isPlaying={
+                          speechPlayback?.key === `viewer-${activeImage._id}` &&
+                          speechPlayback.status === "playing"
+                        }
+                        label="Read this post aloud"
+                        onClick={() => {
+                          void handleTextToSpeech(
+                            `viewer-${activeImage._id}`,
+                            `${activeImage.title}. ${activeImage.caption}`,
+                          );
+                        }}
+                      />
+                    ) : null}
+                  </Stack>
                   {shouldShowLocationDetails && (activeImage.country || activeImage.city || activeImage.streetAddress) ? (
                     <Chip
                       label={[activeImage.streetAddress, activeImage.city, activeImage.country].filter(Boolean).join(", ")}
@@ -2953,6 +3352,53 @@ export default function App({ defaultThemeColors }: AppProps) {
             {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
             <Paper
               variant="outlined"
+              sx={{
+                p: 2,
+                borderColor: alpha(theme.palette.info.main, 0.34),
+                background: `linear-gradient(135deg, ${alpha("#ffffff", 0.92)}, ${alpha(theme.palette.info.light, 0.18)})`,
+              }}
+            >
+              <Stack spacing={1.5}>
+                <TextField
+                  label="AI story prompt"
+                  value={aiPrompt}
+                  onChange={(event) => setAiPrompt(event.target.value)}
+                  multiline
+                  minRows={3}
+                  fullWidth
+                  disabled={isGeneratingAiPhoto || isSubmitting}
+                  placeholder="A quiet birthday morning, a handmade card, and Jayden smiling by the window"
+                />
+                <Stack
+                  direction={{ xs: "column", sm: "row" }}
+                  spacing={1.5}
+                  sx={{ alignItems: { xs: "stretch", sm: "center" }, justifyContent: "space-between" }}
+                >
+                  <Typography variant="body2" color="text.secondary">
+                    Creates the photo, title, category, and story text from your prompt.
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    startIcon={
+                      isGeneratingAiPhoto ? (
+                        <CircularProgress color="inherit" size={18} />
+                      ) : (
+                        <AutoAwesomeOutlinedIcon fontSize="small" />
+                      )
+                    }
+                    disabled={isGeneratingAiPhoto || isSubmitting || !aiPrompt.trim()}
+                    onClick={() => {
+                      void handleAiStoryPhotoCreate();
+                    }}
+                    sx={{ flexShrink: 0 }}
+                  >
+                    {isGeneratingAiPhoto ? "Creating..." : "Create With AI"}
+                  </Button>
+                </Stack>
+              </Stack>
+            </Paper>
+            <Paper
+              variant="outlined"
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
@@ -3115,12 +3561,12 @@ export default function App({ defaultThemeColors }: AppProps) {
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 3 }}>
-          <Button onClick={handleClose} disabled={isSubmitting}>
+          <Button onClick={handleClose} disabled={isSubmitting || isGeneratingAiPhoto}>
             Cancel
           </Button>
           <Button
             variant="contained"
-            disabled={!isFormValid || isSubmitting}
+            disabled={!isFormValid || isSubmitting || isGeneratingAiPhoto}
             onClick={() => {
               void handleSubmit();
             }}
